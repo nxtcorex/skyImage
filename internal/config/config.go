@@ -27,6 +27,8 @@ type Config struct {
 	CORSAllowedOrigins []string `mapstructure:"CORS_ALLOWED_ORIGINS"`
 	TrustedProxies     []string `mapstructure:"TRUSTED_PROXIES"`
 	DemoMode           bool     `mapstructure:"DEMO_MODE"`
+	// 默认不显示的管理端设置项（设置键，逗号分隔）
+	HiddenSettings     []string `mapstructure:"HIDDEN_SETTINGS"`
 	// 演示站配置
 	SiteName         string `mapstructure:"SITE_NAME"`
 	AdminUsername     string `mapstructure:"ADMIN_USERNAME"`
@@ -67,6 +69,7 @@ func Load() (Config, error) {
 	viper.BindEnv("CORS_ALLOWED_ORIGINS")
 	viper.BindEnv("TRUSTED_PROXIES")
 	viper.BindEnv("DEMO_MODE")
+	viper.BindEnv("HIDDEN_SETTINGS")
 	// 演示站配置
 	viper.BindEnv("SITE_NAME")
 	viper.BindEnv("ADMIN_USERNAME")
@@ -86,6 +89,7 @@ func Load() (Config, error) {
 
 	cfg.CORSAllowedOrigins = parseCSVEnv(viper.GetString("CORS_ALLOWED_ORIGINS"))
 	cfg.TrustedProxies = parseCSVEnv(viper.GetString("TRUSTED_PROXIES"))
+	cfg.HiddenSettings = parseCSVEnv(viper.GetString("HIDDEN_SETTINGS"))
 
 	if err := ensurePaths(&cfg); err != nil {
 		return Config{}, err
@@ -117,6 +121,7 @@ func setDefaults() {
 	viper.SetDefault("CORS_ALLOWED_ORIGINS", "")
 	viper.SetDefault("TRUSTED_PROXIES", "")
 	viper.SetDefault("DEMO_MODE", false)
+	viper.SetDefault("HIDDEN_SETTINGS", "")
 	// 演示站配置默认值
 	viper.SetDefault("SITE_NAME", "SkyImage Demo")
 	viper.SetDefault("ADMIN_USERNAME", "demo_admin")
