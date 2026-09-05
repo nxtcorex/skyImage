@@ -5,8 +5,9 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app
 
-# 复制前端依赖文件
-COPY package.json pnpm-lock.yaml ./
+# 复制前端依赖文件（pnpm-workspace.yaml 含 allowBuilds 配置，
+# pnpm v10+ 已不再读取 package.json 的 pnpm 字段，必须一并拷贝）
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # 安装 pnpm 并安装依赖
 RUN npm install -g pnpm && pnpm install --frozen-lockfile
