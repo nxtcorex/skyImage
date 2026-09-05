@@ -32,6 +32,7 @@ import {
   fetchEmailSettings,
   testSmtpEmail,
   type EmailSettings,
+  type EmailSettingsUpdate,
   updateEmailSettings,
   fetchSiteConfig
 } from "@/lib/api";
@@ -406,7 +407,7 @@ function applyTemplateDefaults(input: EmailSettings) {
   return next;
 }
 
-function normalizeTemplateFieldsForSave(input: EmailSettings) {
+function normalizeTemplateFieldsForSave(input: Partial<EmailSettings>) {
   const next = { ...input };
 
   for (const definition of Object.values(mailTemplateDefinitions)) {
@@ -468,8 +469,17 @@ export function AdminEmailSettingsPage() {
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: async (input: EmailSettings) => {
-      await updateEmailSettings(normalizeTemplateFieldsForSave(input));
+    mutationFn: async () => {
+      if (!initialForm) return;
+      const patch: EmailSettingsUpdate = {};
+      (Object.keys(initialForm) as (keyof EmailSettings)[]).forEach((key) => {
+        if (initialForm[key] !== form[key]) {
+          (patch as Record<string, unknown>)[key] = form[key];
+        }
+      });
+      if (Object.keys(patch).length > 0) {
+        await updateEmailSettings(normalizeTemplateFieldsForSave(patch));
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "email-settings"] });
@@ -811,7 +821,7 @@ export function AdminEmailSettingsPage() {
         <p className="text-xs text-muted-foreground">
           {isFormDirty ? t("admin.systemSettings.unsaved") : t("admin.systemSettings.clean")}
         </p>
-        <Button onClick={() => mutation.mutate(form)} disabled={mutation.isPending || !isFormDirty}>
+        <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || !isFormDirty}>
           {mutation.isPending ? t("common.saving") : t("admin.emailSettings.save")}
         </Button>
       </div>

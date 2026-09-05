@@ -20,6 +20,7 @@ import {
   fetchStrategies,
   fetchUsers,
   type TicketSettings,
+  type TicketSettingsUpdate,
   type StrategyRecord
 } from "@/lib/api";
 import { SplashScreen } from "@/components/SplashScreen";
@@ -86,7 +87,25 @@ export function AdminTicketSettingsPage() {
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: updateTicketSettings,
+    mutationFn: async () => {
+      if (!initialForm) return;
+      const patch: TicketSettingsUpdate = {};
+      if (initialForm.attachmentStrategyId !== form.attachmentStrategyId) {
+        patch.attachmentStrategyId = form.attachmentStrategyId;
+      }
+      if (initialForm.emailNotifyEnabled !== form.emailNotifyEnabled) {
+        patch.emailNotifyEnabled = form.emailNotifyEnabled;
+      }
+      if (initialForm.emailNotifyMode !== form.emailNotifyMode) {
+        patch.emailNotifyMode = form.emailNotifyMode;
+      }
+      if (initialForm.emailNotifyAdminIds.join(",") !== form.emailNotifyAdminIds.join(",")) {
+        patch.emailNotifyAdminIds = form.emailNotifyAdminIds;
+      }
+      if (Object.keys(patch).length > 0) {
+        await updateTicketSettings(patch);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "ticket-settings"] });
       queryClient.invalidateQueries({ queryKey: ["tickets", "attachment-strategy"] });
@@ -233,7 +252,7 @@ export function AdminTicketSettingsPage() {
           {isFormDirty ? t("admin.ticketSettings.unsaved") : t("admin.ticketSettings.clean")}
         </p>
         <Button
-          onClick={() => mutation.mutate(form)}
+          onClick={() => mutation.mutate()}
           disabled={mutation.isPending || !isFormDirty}
         >
           {mutation.isPending ? t("common.saving") : t("admin.ticketSettings.save")}

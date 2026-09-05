@@ -17,6 +17,7 @@ import (
 
 func (s *Server) registerSiteRoutes(r *gin.RouterGroup) {
 	r.GET("/site/config", s.handleSiteConfig)
+	r.GET("/site/legal/:type", s.handleSiteLegal)
 	r.GET("/site/turnstile/:scenario", s.handleTurnstileConfig)
 	r.GET("/gallery/public", middleware.OptionalAuth(s.users, s.session), s.handleGalleryPublic)
 	r.GET("/users/:id/public", middleware.OptionalAuth(s.users, s.session), s.handlePublicUserProfile)
@@ -66,8 +67,6 @@ func (s *Server) handleSiteConfig(c *gin.Context) {
 		"notFoundHeading":                settings["site.notfound_heading"],
 		"notFoundText":                   settings["site.notfound_text"],
 		"notFoundHtml":                   settings["site.notfound_html"],
-		"termsOfService":                 settings["site.terms_of_service"],
-		"privacyPolicy":                  settings["site.privacy_policy"],
 		"homePageMode":                   homePageMode,
 		"homeCustomHtml":                 homeCustomHTML,
 		"enableGallery":                  enableGallery,
@@ -82,6 +81,26 @@ func (s *Server) handleSiteConfig(c *gin.Context) {
 		"hiddenSidebarItems":             splitConfigList(settings[ConfigSidebarHidden]),
 	}
 	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+func (s *Server) handleSiteLegal(c *gin.Context) {
+	legalType := strings.ToLower(strings.TrimSpace(c.Param("type")))
+	var configKey string
+	switch legalType {
+	case "terms":
+		configKey = "site.terms_of_service"
+	case "privacy":
+		configKey = "site.privacy_policy"
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid type"})
+		return
+	}
+	settings, err := s.admin.GetSettings(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"content": settings[configKey]}})
 }
 
 func (s *Server) handleGalleryPublic(c *gin.Context) {

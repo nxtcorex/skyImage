@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchSiteConfig } from "@/lib/api";
+import { fetchSiteConfig, fetchLegalContent } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/i18n";
 import { PublicTopNav } from "@/components/PublicTopNav";
@@ -8,12 +8,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function TermsPage() {
   const { t } = useI18n();
-  const { data: siteConfig, isLoading } = useQuery({
+  const { data: siteConfig } = useQuery({
     queryKey: ["site-config"],
     queryFn: fetchSiteConfig,
   });
+  const { data: termsContent, isLoading } = useQuery({
+    queryKey: ["legal-content", "terms"],
+    queryFn: () => fetchLegalContent("terms"),
+  });
   const siteName = siteConfig?.title;
-  const termsContent = siteConfig?.termsOfService || "";
+  const content = termsContent || "";
 
   if (isLoading) {
     return (
@@ -35,7 +39,7 @@ export function TermsPage() {
     );
   }
 
-  if (!termsContent.trim()) {
+  if (!content.trim()) {
     return (
       <div className="min-h-screen bg-muted">
         <PublicTopNav title={siteName} description="" compact />
@@ -62,7 +66,7 @@ export function TermsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <MarkdownContent content={termsContent} />
+            <MarkdownContent content={content} />
           </CardContent>
         </Card>
       </div>

@@ -18,7 +18,8 @@ import {
 import {
   fetchGeneralSettings,
   updateGeneralSettings,
-  type GeneralSettings
+  type GeneralSettings,
+  type GeneralSettingsUpdate
 } from "@/lib/api";
 import { SplashScreen } from "@/components/SplashScreen";
 import { useI18n } from "@/i18n";
@@ -90,7 +91,20 @@ export function AdminSystemSettingsPage() {
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: (input: GeneralSettings) => updateGeneralSettings(input),
+    mutationFn: async () => {
+      if (!initialForm) {
+        return;
+      }
+      const patch: GeneralSettingsUpdate = {};
+      (Object.keys(initialForm) as (keyof GeneralSettings)[]).forEach((key) => {
+        if (initialForm[key] !== form[key]) {
+          (patch as Record<string, unknown>)[key] = form[key];
+        }
+      });
+      if (Object.keys(patch).length > 0) {
+        await updateGeneralSettings(patch);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["site-config"] });
       queryClient.invalidateQueries({ queryKey: ["site-meta"] });
@@ -345,7 +359,7 @@ export function AdminSystemSettingsPage() {
           {isFormDirty ? t("admin.systemSettings.unsaved") : t("admin.systemSettings.clean")}
         </p>
         <Button
-          onClick={() => mutation.mutate(form)}
+          onClick={() => mutation.mutate()}
           disabled={mutation.isPending || !isFormDirty}
         >
           {mutation.isPending ? t("common.saving") : t("admin.systemSettings.saveAll")}

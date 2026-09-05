@@ -17,9 +17,13 @@ import {
 } from "@/components/ui/select";
 import {
   fetchSiteSettings,
+  fetchAdminLegalContent,
   updateSiteSettings,
+  updateAdminLegalContent,
   fetchLegalDefaults,
-  type SiteSettings
+  type SiteSettings,
+  type SiteSettingsUpdate,
+  type LegalType
 } from "@/lib/api";
 import { SplashScreen } from "@/components/SplashScreen";
 import { useI18n } from "@/i18n";
@@ -36,11 +40,15 @@ const defaultSiteSettingsForm: SiteSettings = {
   notFoundHeading: "",
   notFoundText: "",
   notFoundHtml: "",
-  termsOfService: "",
-  privacyPolicy: "",
   homePageMode: "default",
   homeCustomHtml: "",
   accountDisabledNotice: "",
+};
+
+// legal 内容的初始值，用于判断是否发生修改。
+const defaultLegalForm: Record<LegalType, string> = {
+  terms: "",
+  privacy: ""
 };
 
 export function AdminSiteSettingsPage() {
@@ -53,14 +61,21 @@ export function AdminSiteSettingsPage() {
   const [form, setForm] = useState<SiteSettings>(defaultSiteSettingsForm);
   const [initialForm, setInitialForm] = useState<SiteSettings | null>(null);
 
+  const [legal, setLegal] = useState<Record<LegalType, string>>(defaultLegalForm);
+  const [initialLegal, setInitialLegal] =
+    useState<Record<LegalType, string>>(defaultLegalForm);
+
   const isFormDirty = useMemo(() => {
     if (!initialForm) {
       return false;
     }
-    return (Object.keys(initialForm) as (keyof SiteSettings)[]).some(
+    const siteDirty = (Object.keys(initialForm) as (keyof SiteSettings)[]).some(
       (key) => initialForm[key] !== form[key]
     );
-  }, [initialForm, form]);
+    const legalDirty =
+      initialLegal.terms !== legal.terms || initialLegal.privacy !== legal.privacy;
+    return siteDirty || legalDirty;
+  }, [initialForm, form, initialLegal, legal]);
 
   useEffect(() => {
     if (!data) return;
@@ -72,8 +87,51 @@ export function AdminSiteSettingsPage() {
     setInitialForm(normalized);
   }, [data]);
 
+  useEffect(() => {
+    if (!initialForm) return;
+    let cancelled = false;
+    Promise.all([
+      fetchAdminLegalContent("terms"),
+      fetchAdminLegalContent("privacy")
+    ])
+      .then(([terms, privacy]) => {
+        if (cancelled) return;
+        setLegal({ terms, privacy });
+        setInitialLegal({ terms, privacy });
+      })
+      .catch(() => {
+        /* legal 文本加载失败时保留空内容，不影响其他设置保存 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialForm]);
+
   const mutation = useMutation({
-    mutationFn: (input: SiteSettings) => updateSiteSettings(input),
+    mutationFn: async () => {
+      const tasks: Promise<void>[] = [];
+
+      if (initialForm) {
+        const sitePatch: SiteSettingsUpdate = {};
+        (Object.keys(initialForm) as (keyof SiteSettings)[]).forEach((key) => {
+          if (initialForm[key] !== form[key]) {
+            (sitePatch as Record<string, unknown>)[key] = form[key];
+          }
+        });
+        if (Object.keys(sitePatch).length > 0) {
+          tasks.push(updateSiteSettings(sitePatch));
+        }
+      }
+
+      if (initialLegal.terms !== legal.terms) {
+        tasks.push(updateAdminLegalContent("terms", legal.terms));
+      }
+      if (initialLegal.privacy !== legal.privacy) {
+        tasks.push(updateAdminLegalContent("privacy", legal.privacy));
+      }
+
+      await Promise.all(tasks);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["site-config"] });
       queryClient.invalidateQueries({ queryKey: ["site-meta"] });
@@ -194,7 +252,7 @@ export function AdminSiteSettingsPage() {
                 onClick={async () => {
                   try {
                     const defaults = await fetchLegalDefaults();
-                    handleChange("termsOfService", defaults.termsOfService);
+                    setLegal((prev) => ({ ...prev, terms: defaults.termsOfService }));
                     toast.success(t("admin.siteSettings.resetTermsSuccess"));
                   } catch (error) {
                     toast.error(t("admin.siteSettings.resetDefaultFailed"));
@@ -207,8 +265,8 @@ export function AdminSiteSettingsPage() {
             </div>
             <Textarea
               rows={6}
-              value={form.termsOfService}
-              onChange={(e) => handleChange("termsOfService", e.target.value)}
+              value={legal.terms}
+              onChange={(e) => setLegal((prev) => ({ ...prev, terms: e.target.value }))}
               placeholder={t("admin.siteSettings.termsPlaceholder")}
             />
             <p className="text-xs text-muted-foreground">
@@ -226,7 +284,7 @@ export function AdminSiteSettingsPage() {
                 onClick={async () => {
                   try {
                     const defaults = await fetchLegalDefaults();
-                    handleChange("privacyPolicy", defaults.privacyPolicy);
+                    setLegal((prev) => ({ ...prev, privacy: defaults.privacyPolicy }));
                     toast.success(t("admin.siteSettings.resetPrivacySuccess"));
                   } catch (error) {
                     toast.error(t("admin.siteSettings.resetDefaultFailed"));
@@ -239,8 +297,8 @@ export function AdminSiteSettingsPage() {
             </div>
             <Textarea
               rows={6}
-              value={form.privacyPolicy}
-              onChange={(e) => handleChange("privacyPolicy", e.target.value)}
+              value={legal.privacy}
+              onChange={(e) => setLegal((prev) => ({ ...prev, privacy: e.target.value }))}
               placeholder={t("admin.siteSettings.privacyPlaceholder")}
             />
             <p className="text-xs text-muted-foreground">
@@ -362,7 +420,7 @@ export function AdminSiteSettingsPage() {
         <p className="text-xs text-muted-foreground">
           {isFormDirty ? t("admin.systemSettings.unsaved") : t("admin.systemSettings.clean")}
         </p>
-        <Button onClick={() => mutation.mutate(form)} disabled={mutation.isPending || !isFormDirty}>
+        <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || !isFormDirty}>
           {mutation.isPending ? t("common.saving") : t("admin.siteSettings.save")}
         </Button>
       </div>

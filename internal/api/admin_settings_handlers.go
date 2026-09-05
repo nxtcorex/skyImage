@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -26,7 +27,8 @@ func parseUintSetting(raw string) uint {
 }
 
 // ---------------------------------------------------------------------------
-// Site Settings (GET/PUT /admin/system/site)
+// Site Settings (GET /admin/system/site, PATCH /admin/system/site)
+// Legal texts (terms/privacy) live in their own endpoints: /admin/system/site/legal/:type
 // ---------------------------------------------------------------------------
 
 type siteSettingsPayload struct {
@@ -41,8 +43,6 @@ type siteSettingsPayload struct {
 	NotFoundHeading       string `json:"notFoundHeading"`
 	NotFoundText          string `json:"notFoundText"`
 	NotFoundHtml          string `json:"notFoundHtml"`
-	TermsOfService        string `json:"termsOfService"`
-	PrivacyPolicy         string `json:"privacyPolicy"`
 	HomePageMode          string `json:"homePageMode"`
 	HomeCustomHTML        string `json:"homeCustomHtml"`
 	AccountDisabledNotice string `json:"accountDisabledNotice"`
@@ -87,8 +87,6 @@ func (s *Server) handleAdminSiteSettings(c *gin.Context) {
 		NotFoundHeading:       settings["site.notfound_heading"],
 		NotFoundText:          settings["site.notfound_text"],
 		NotFoundHtml:          settings["site.notfound_html"],
-		TermsOfService:        settings["site.terms_of_service"],
-		PrivacyPolicy:         settings["site.privacy_policy"],
 		HomePageMode:          homePageMode,
 		HomeCustomHTML:        homeCustomHTML,
 		AccountDisabledNotice: disabledNotice,
@@ -96,51 +94,97 @@ func (s *Server) handleAdminSiteSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": payload})
 }
 
+// siteSettingsUpdatePayload 仅用于 PATCH 部分更新：指针字段出现时才会写入对应配置，
+// 未出现的字段保持原值，实现“只提交修改的字段”。
+type siteSettingsUpdatePayload struct {
+	SiteTitle             *string `json:"siteTitle"`
+	ConsoleURL            *string `json:"consoleUrl"`
+	SiteDescription       *string `json:"siteDescription"`
+	SiteSlogan            *string `json:"siteSlogan"`
+	SiteLogo              *string `json:"siteLogo"`
+	About                 *string `json:"about"`
+	AboutTitle            *string `json:"aboutTitle"`
+	NotFoundMode          *string `json:"notFoundMode"`
+	NotFoundHeading       *string `json:"notFoundHeading"`
+	NotFoundText          *string `json:"notFoundText"`
+	NotFoundHtml          *string `json:"notFoundHtml"`
+	HomePageMode          *string `json:"homePageMode"`
+	HomeCustomHTML        *string `json:"homeCustomHtml"`
+	AccountDisabledNotice *string `json:"accountDisabledNotice"`
+}
+
 func (s *Server) handleAdminUpdateSiteSettings(c *gin.Context) {
 	if !requireSuperAdmin(c) {
 		return
 	}
-	var payload siteSettingsPayload
+	var payload siteSettingsUpdatePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	notice := strings.TrimSpace(payload.AccountDisabledNotice)
-	if notice == "" {
-		notice = defaultAccountDisabledNotice
-	}
-	homePageMode := strings.TrimSpace(payload.HomePageMode)
-	if homePageMode != "custom_html" {
-		homePageMode = "default"
-	}
-	homeCustomHTML := ""
-	if homePageMode == "custom_html" {
-		homeCustomHTML = payload.HomeCustomHTML
+	current, err := s.admin.GetSettings(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
-	values := map[string]string{
-		"site.title":              payload.SiteTitle,
-		"site.console_url":        payload.ConsoleURL,
-		"site.description":        payload.SiteDescription,
-		"site.slogan":             payload.SiteSlogan,
-		"site.logo":               payload.SiteLogo,
-		"site.about":              payload.About,
-		"site.about_title":        payload.AboutTitle,
-		"site.notfound_mode":      payload.NotFoundMode,
-		"site.notfound_heading":   payload.NotFoundHeading,
-		"site.notfound_text":      payload.NotFoundText,
-		"site.notfound_html":      payload.NotFoundHtml,
-		"site.terms_of_service":   payload.TermsOfService,
-		"site.privacy_policy":     payload.PrivacyPolicy,
-		"site.home_page_mode":     homePageMode,
-		"site.home_custom_html":   homeCustomHTML,
-		"account.disabled_notice": notice,
+	values := map[string]string{}
+	setIf := func(configKey string, v *string) {
+		if v != nil {
+			values[configKey] = *v
+		}
+	}
+	setIf("site.title", payload.SiteTitle)
+	setIf("site.description", payload.SiteDescription)
+	setIf("site.slogan", payload.SiteSlogan)
+	setIf("site.logo", payload.SiteLogo)
+	setIf("site.about", payload.About)
+	setIf("site.about_title", payload.AboutTitle)
+	setIf("site.notfound_mode", payload.NotFoundMode)
+	setIf("site.notfound_heading", payload.NotFoundHeading)
+	setIf("site.notfound_text", payload.NotFoundText)
+	setIf("site.notfound_html", payload.NotFoundHtml)
+	setIf("site.console_url", payload.ConsoleURL)
+
+	if payload.AccountDisabledNotice != nil {
+		notice := strings.TrimSpace(*payload.AccountDisabledNotice)
+		if notice == "" {
+			notice = defaultAccountDisabledNotice
+		}
+		values["account.disabled_notice"] = notice
 	}
 
-	oldSettings, _ := s.admin.GetSettings(c.Request.Context())
-	oldConsole := strings.TrimSpace(oldSettings["site.console_url"])
-	newConsole := strings.TrimSpace(payload.ConsoleURL)
+	if payload.HomePageMode != nil {
+		mode := strings.TrimSpace(*payload.HomePageMode)
+		if mode != "custom_html" {
+			mode = "default"
+		}
+		values["site.home_page_mode"] = mode
+		if mode == "custom_html" {
+			if payload.HomeCustomHTML != nil {
+				values["site.home_custom_html"] = *payload.HomeCustomHTML
+			} else {
+				values["site.home_custom_html"] = current["site.home_custom_html"]
+			}
+		} else {
+			// 切回默认首页时清空自定义 HTML
+			values["site.home_custom_html"] = ""
+		}
+	} else if payload.HomeCustomHTML != nil {
+		values["site.home_custom_html"] = *payload.HomeCustomHTML
+	}
+
+	if len(values) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": "updated"})
+		return
+	}
+
+	oldConsole := strings.TrimSpace(current["site.console_url"])
+	newConsole := ""
+	if consoleV, ok := values["site.console_url"]; ok {
+		newConsole = strings.TrimSpace(consoleV)
+	}
 
 	if err := s.admin.UpdateSettings(c.Request.Context(), values); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -155,6 +199,58 @@ func (s *Server) handleAdminUpdateSiteSettings(c *gin.Context) {
 		}
 	}
 
+	c.JSON(http.StatusOK, gin.H{"data": "updated"})
+}
+
+// siteLegalConfigKey 将 legal 类型映射到对应的配置 key。
+func siteLegalConfigKey(legalType string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(legalType)) {
+	case "terms":
+		return "site.terms_of_service", nil
+	case "privacy":
+		return "site.privacy_policy", nil
+	default:
+		return "", errors.New("Invalid type")
+	}
+}
+
+func (s *Server) handleAdminSiteLegal(c *gin.Context) {
+	if !requireSuperAdmin(c) {
+		return
+	}
+	configKey, err := siteLegalConfigKey(c.Param("type"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	settings, err := s.admin.GetSettings(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"content": settings[configKey]}})
+}
+
+func (s *Server) handleAdminUpdateSiteLegal(c *gin.Context) {
+	if !requireSuperAdmin(c) {
+		return
+	}
+	configKey, err := siteLegalConfigKey(c.Param("type"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	var payload struct {
+		Content string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := s.admin.UpdateSettings(c.Request.Context(), map[string]string{configKey: payload.Content}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"data": "updated"})
 }
 
@@ -237,61 +333,104 @@ func (s *Server) handleAdminGeneralSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": payload})
 }
 
+// generalSettingsUpdatePayload 用于 PATCH 部分更新：指针字段出现时才写入，未出现字段保持原值。
+type generalSettingsUpdatePayload struct {
+	ImageLoadRows                 *int     `json:"imageLoadRows"`
+	UserNotificationLimit         *int     `json:"userNotificationLimit"`
+	AdminImageDeleteDefaultReason *string  `json:"adminImageDeleteDefaultReason"`
+	SystemAutoDeleteDefaultReason *string  `json:"systemAutoDeleteDefaultReason"`
+	EnableCDN                     *bool    `json:"enableCDN"`
+	EnableGallery                 *bool    `json:"enableGallery"`
+	EnableHome                    *bool    `json:"enableHome"`
+	EnableApi                     *bool    `json:"enableApi"`
+	EnablePasskey                 *bool    `json:"enablePasskey"`
+	AllowRegistration             *bool    `json:"allowRegistration"` // legacy, derived from registrationMode
+	RegistrationMode              *string  `json:"registrationMode"`  // open | oauth_only | closed
+	HiddenSidebarItems            []string `json:"hiddenSidebarItems"`
+}
+
 func (s *Server) handleAdminUpdateGeneralSettings(c *gin.Context) {
 	if !requireSuperAdmin(c) {
 		return
 	}
-	var payload generalSettingsPayload
+	var payload generalSettingsUpdatePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	adminDeleteReason := notifications.NormalizeAdminDeleteReason(payload.AdminImageDeleteDefaultReason)
-	systemAutoDeleteReason := notifications.NormalizeSystemAutoDeleteReason(payload.SystemAutoDeleteDefaultReason)
+	values := map[string]string{}
 
-	regMode := strings.ToLower(strings.TrimSpace(payload.RegistrationMode))
-	switch regMode {
-	case "open", "oauth_only", "closed":
-	default:
-		// Backward compatible: allowRegistration bool only
-		if payload.AllowRegistration {
-			regMode = "open"
-		} else {
+	if payload.ImageLoadRows != nil {
+		values["images.load_rows"] = strconv.Itoa(normalizeImageLoadRowsValue(*payload.ImageLoadRows))
+	}
+	if payload.UserNotificationLimit != nil {
+		values[notifications.ConfigUserRetentionLimit] = strconv.Itoa(normalizeUserNotificationLimit(*payload.UserNotificationLimit))
+	}
+	if payload.AdminImageDeleteDefaultReason != nil {
+		values[notifications.ConfigAdminImageDeleteReason] = notifications.NormalizeAdminDeleteReason(*payload.AdminImageDeleteDefaultReason)
+	}
+	if payload.SystemAutoDeleteDefaultReason != nil {
+		values[notifications.ConfigSystemAutoDeleteReason] = notifications.NormalizeSystemAutoDeleteReason(*payload.SystemAutoDeleteDefaultReason)
+	}
+	if payload.EnableCDN != nil {
+		values["mail.cdn.enabled"] = strconv.FormatBool(*payload.EnableCDN)
+	}
+	if payload.EnableGallery != nil {
+		values["features.gallery"] = strconv.FormatBool(*payload.EnableGallery)
+	}
+	if payload.EnableHome != nil {
+		values["features.home"] = strconv.FormatBool(*payload.EnableHome)
+	}
+	if payload.EnableApi != nil {
+		values["features.api"] = strconv.FormatBool(*payload.EnableApi)
+	}
+	if payload.EnablePasskey != nil {
+		values["features.passkeys_enabled"] = strconv.FormatBool(*payload.EnablePasskey)
+	}
+
+	// 注册模式：registrationMode 优先；否则回退到 allowRegistration（兼容旧请求）。
+	if payload.RegistrationMode != nil {
+		regMode := strings.ToLower(strings.TrimSpace(*payload.RegistrationMode))
+		switch regMode {
+		case "open", "oauth_only", "closed":
+		default:
 			regMode = "closed"
 		}
+		values["features.registration_mode"] = regMode
+		values["features.allow_registration"] = strconv.FormatBool(regMode != "closed")
+	} else if payload.AllowRegistration != nil {
+		if *payload.AllowRegistration {
+			values["features.registration_mode"] = "open"
+		} else {
+			values["features.registration_mode"] = "closed"
+		}
+		values["features.allow_registration"] = strconv.FormatBool(*payload.AllowRegistration)
 	}
 
-	hiddenItems := make([]string, 0, len(payload.HiddenSidebarItems))
-	seen := make(map[string]struct{}, len(payload.HiddenSidebarItems))
-	for _, item := range payload.HiddenSidebarItems {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			continue
+	if payload.HiddenSidebarItems != nil {
+		hiddenItems := make([]string, 0, len(payload.HiddenSidebarItems))
+		seen := make(map[string]struct{}, len(payload.HiddenSidebarItems))
+		for _, item := range payload.HiddenSidebarItems {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			if _, ok := allowedHiddenSidebarURLs[item]; !ok {
+				continue
+			}
+			if _, dup := seen[item]; dup {
+				continue
+			}
+			seen[item] = struct{}{}
+			hiddenItems = append(hiddenItems, item)
 		}
-		if _, ok := allowedHiddenSidebarURLs[item]; !ok {
-			continue
-		}
-		if _, dup := seen[item]; dup {
-			continue
-		}
-		seen[item] = struct{}{}
-		hiddenItems = append(hiddenItems, item)
+		values[ConfigSidebarHidden] = strings.Join(hiddenItems, ",")
 	}
 
-	values := map[string]string{
-		"images.load_rows":                         strconv.Itoa(normalizeImageLoadRowsValue(payload.ImageLoadRows)),
-		notifications.ConfigUserRetentionLimit:     strconv.Itoa(normalizeUserNotificationLimit(payload.UserNotificationLimit)),
-		notifications.ConfigAdminImageDeleteReason: adminDeleteReason,
-		notifications.ConfigSystemAutoDeleteReason: systemAutoDeleteReason,
-		"mail.cdn.enabled":                         strconv.FormatBool(payload.EnableCDN),
-		"features.gallery":                         strconv.FormatBool(payload.EnableGallery),
-		"features.home":                            strconv.FormatBool(payload.EnableHome),
-		"features.api":                             strconv.FormatBool(payload.EnableApi),
-		"features.passkeys_enabled":                strconv.FormatBool(payload.EnablePasskey),
-		"features.registration_mode":               regMode,
-		"features.allow_registration":              strconv.FormatBool(regMode != "closed"),
-		ConfigSidebarHidden:                        strings.Join(hiddenItems, ","),
+	if len(values) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": "updated"})
+		return
 	}
 
 	if err := s.admin.UpdateSettings(c.Request.Context(), values); err != nil {
@@ -340,35 +479,58 @@ func (s *Server) handleAdminTicketSettings(c *gin.Context) {
 	}})
 }
 
+// ticketSettingsUpdatePayload 用于 PATCH 部分更新：指针字段出现时才写入，未出现字段保持原值。
+type ticketSettingsUpdatePayload struct {
+	AttachmentStrategyID *uint    `json:"attachmentStrategyId"`
+	EmailNotifyEnabled   *bool    `json:"emailNotifyEnabled"`
+	EmailNotifyMode      *string  `json:"emailNotifyMode"` // all_admins | selected
+	EmailNotifyAdminIDs  []string `json:"emailNotifyAdminIds"`
+}
+
 func (s *Server) handleAdminUpdateTicketSettings(c *gin.Context) {
 	if !requireSuperAdmin(c) {
 		return
 	}
-	var payload ticketSettingsPayload
+	var payload ticketSettingsUpdatePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	mode := strings.ToLower(strings.TrimSpace(payload.EmailNotifyMode))
-	if mode != tickets.NotifyModeSelected {
-		mode = tickets.NotifyModeAllAdmins
+
+	values := map[string]string{}
+
+	if payload.AttachmentStrategyID != nil {
+		values[tickets.ConfigAttachmentStrategyID] = strconv.FormatUint(uint64(*payload.AttachmentStrategyID), 10)
 	}
-	ids := make([]string, 0, len(payload.EmailNotifyAdminIDs))
-	for _, id := range payload.EmailNotifyAdminIDs {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
+	if payload.EmailNotifyEnabled != nil {
+		values[tickets.ConfigEmailNotifyEnabled] = strconv.FormatBool(*payload.EmailNotifyEnabled)
+	}
+	if payload.EmailNotifyMode != nil {
+		mode := strings.ToLower(strings.TrimSpace(*payload.EmailNotifyMode))
+		if mode != tickets.NotifyModeSelected {
+			mode = tickets.NotifyModeAllAdmins
 		}
-		if _, err := strconv.ParseUint(id, 10, 64); err == nil {
-			ids = append(ids, id)
+		values[tickets.ConfigEmailNotifyMode] = mode
+	}
+	if payload.EmailNotifyAdminIDs != nil {
+		ids := make([]string, 0, len(payload.EmailNotifyAdminIDs))
+		for _, id := range payload.EmailNotifyAdminIDs {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if _, err := strconv.ParseUint(id, 10, 64); err == nil {
+				ids = append(ids, id)
+			}
 		}
+		values[tickets.ConfigEmailNotifyAdminIDs] = strings.Join(ids, ",")
 	}
-	values := map[string]string{
-		tickets.ConfigAttachmentStrategyID: strconv.FormatUint(uint64(payload.AttachmentStrategyID), 10),
-		tickets.ConfigEmailNotifyEnabled:   strconv.FormatBool(payload.EmailNotifyEnabled),
-		tickets.ConfigEmailNotifyMode:      mode,
-		tickets.ConfigEmailNotifyAdminIDs:  strings.Join(ids, ","),
+
+	if len(values) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": "updated"})
+		return
 	}
+
 	if err := s.admin.UpdateSettings(c.Request.Context(), values); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -458,11 +620,45 @@ func (s *Server) handleAdminEmailSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": payload})
 }
 
+// emailSettingsUpdatePayload 用于 PATCH 部分更新：指针字段出现时才写入，未出现字段保持原值。
+type emailSettingsUpdatePayload struct {
+	SMTPHost                             *string `json:"smtpHost"`
+	SMTPPort                             *string `json:"smtpPort"`
+	SMTPUsername                         *string `json:"smtpUsername"`
+	SMTPPassword                         *string `json:"smtpPassword"`
+	SMTPFrom                             *string `json:"smtpFrom"`
+	SMTPSecure                           *bool   `json:"smtpSecure"`
+	MailTestSubject                      *string `json:"mailTestSubject"`
+	MailTestBody                         *string `json:"mailTestBody"`
+	MailRegisterVerifySubject            *string `json:"mailRegisterVerifySubject"`
+	MailRegisterVerifyBody               *string `json:"mailRegisterVerifyBody"`
+	MailRegisterSuccessSubject           *string `json:"mailRegisterSuccessSubject"`
+	MailRegisterSuccessBody              *string `json:"mailRegisterSuccessBody"`
+	MailLoginNotificationSubject         *string `json:"mailLoginNotificationSubject"`
+	MailLoginNotificationBody            *string `json:"mailLoginNotificationBody"`
+	MailForgotPasswordSubject            *string `json:"mailForgotPasswordSubject"`
+	MailForgotPasswordBody               *string `json:"mailForgotPasswordBody"`
+	MailTicketCreatedSubject             *string `json:"mailTicketCreatedSubject"`
+	MailTicketCreatedBody                *string `json:"mailTicketCreatedBody"`
+	MailTicketReplyUserSubject           *string `json:"mailTicketReplyUserSubject"`
+	MailTicketReplyUserBody              *string `json:"mailTicketReplyUserBody"`
+	MailTicketReplyAdminSubject          *string `json:"mailTicketReplyAdminSubject"`
+	MailTicketReplyAdminBody             *string `json:"mailTicketReplyAdminBody"`
+	MailTicketStatusSubject              *string `json:"mailTicketStatusSubject"`
+	MailTicketStatusBody                 *string `json:"mailTicketStatusBody"`
+	EnableRegisterVerify                 *bool   `json:"enableRegisterVerify"`
+	EnableLoginNotification              *bool   `json:"enableLoginNotification"`
+	EnableForgotPassword                 *bool   `json:"enableForgotPassword"`
+	EnableForgotPasswordTurnstile        *bool   `json:"enableForgotPasswordTurnstile"`
+	EnableForgotPasswordTurnstileRequest *bool   `json:"enableForgotPasswordTurnstileRequest"`
+	EnableForgotPasswordTurnstileReset   *bool   `json:"enableForgotPasswordTurnstileReset"`
+}
+
 func (s *Server) handleAdminUpdateEmailSettings(c *gin.Context) {
 	if !requireSuperAdmin(c) {
 		return
 	}
-	var payload emailSettingsPayload
+	var payload emailSettingsUpdatePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -474,42 +670,63 @@ func (s *Server) handleAdminUpdateEmailSettings(c *gin.Context) {
 		return
 	}
 
-	smtpPassword := strings.TrimSpace(payload.SMTPPassword)
-	if smtpPassword == "" || smtpPassword == "***" {
-		smtpPassword = settings["mail.smtp.password"]
+	values := map[string]string{}
+
+	setIf := func(configKey string, v *string) {
+		if v != nil {
+			values[configKey] = *v
+		}
+	}
+	setBoolIf := func(configKey string, v *bool) {
+		if v != nil {
+			values[configKey] = strconv.FormatBool(*v)
+		}
 	}
 
-	values := map[string]string{
-		"mail.smtp.host":                           payload.SMTPHost,
-		"mail.smtp.port":                           payload.SMTPPort,
-		"mail.smtp.username":                       payload.SMTPUsername,
-		"mail.smtp.password":                       smtpPassword,
-		"mail.smtp.from":                           payload.SMTPFrom,
-		"mail.smtp.secure":                         strconv.FormatBool(payload.SMTPSecure),
-		"mail.template.test.subject":               payload.MailTestSubject,
-		"mail.template.test.body":                  payload.MailTestBody,
-		"mail.template.register_verify.subject":    payload.MailRegisterVerifySubject,
-		"mail.template.register_verify.body":       payload.MailRegisterVerifyBody,
-		"mail.template.register_success.subject":   payload.MailRegisterSuccessSubject,
-		"mail.template.register_success.body":      payload.MailRegisterSuccessBody,
-		"mail.template.login_notification.subject": payload.MailLoginNotificationSubject,
-		"mail.template.login_notification.body":    payload.MailLoginNotificationBody,
-		"mail.template.forgot_password.subject":    payload.MailForgotPasswordSubject,
-		"mail.template.forgot_password.body":       payload.MailForgotPasswordBody,
-		"mail.template.ticket_created.subject":     payload.MailTicketCreatedSubject,
-		"mail.template.ticket_created.body":        payload.MailTicketCreatedBody,
-		"mail.template.ticket_reply_user.subject":  payload.MailTicketReplyUserSubject,
-		"mail.template.ticket_reply_user.body":     payload.MailTicketReplyUserBody,
-		"mail.template.ticket_reply_admin.subject": payload.MailTicketReplyAdminSubject,
-		"mail.template.ticket_reply_admin.body":    payload.MailTicketReplyAdminBody,
-		"mail.template.ticket_status.subject":      payload.MailTicketStatusSubject,
-		"mail.template.ticket_status.body":         payload.MailTicketStatusBody,
-		"mail.register.verify":                     strconv.FormatBool(payload.EnableRegisterVerify),
-		"mail.login.notification":                  strconv.FormatBool(payload.EnableLoginNotification),
-		"mail.forgot_password.enabled":             strconv.FormatBool(payload.EnableForgotPassword),
-		"mail.forgot_password.turnstile":           strconv.FormatBool(payload.EnableForgotPasswordTurnstile),
-		"mail.forgot_password.turnstile_request":   strconv.FormatBool(payload.EnableForgotPasswordTurnstileRequest),
-		"mail.forgot_password.turnstile_reset":     strconv.FormatBool(payload.EnableForgotPasswordTurnstileReset),
+	setIf("mail.smtp.host", payload.SMTPHost)
+	setIf("mail.smtp.port", payload.SMTPPort)
+	setIf("mail.smtp.username", payload.SMTPUsername)
+	setIf("mail.smtp.from", payload.SMTPFrom)
+	setBoolIf("mail.smtp.secure", payload.SMTPSecure)
+
+	// 密码为空或 "***"（未新增密钥）时保持原值。
+	if payload.SMTPPassword != nil {
+		smtpPassword := strings.TrimSpace(*payload.SMTPPassword)
+		if smtpPassword == "" || smtpPassword == "***" {
+			smtpPassword = settings["mail.smtp.password"]
+		}
+		values["mail.smtp.password"] = smtpPassword
+	}
+
+	setIf("mail.template.test.subject", payload.MailTestSubject)
+	setIf("mail.template.test.body", payload.MailTestBody)
+	setIf("mail.template.register_verify.subject", payload.MailRegisterVerifySubject)
+	setIf("mail.template.register_verify.body", payload.MailRegisterVerifyBody)
+	setIf("mail.template.register_success.subject", payload.MailRegisterSuccessSubject)
+	setIf("mail.template.register_success.body", payload.MailRegisterSuccessBody)
+	setIf("mail.template.login_notification.subject", payload.MailLoginNotificationSubject)
+	setIf("mail.template.login_notification.body", payload.MailLoginNotificationBody)
+	setIf("mail.template.forgot_password.subject", payload.MailForgotPasswordSubject)
+	setIf("mail.template.forgot_password.body", payload.MailForgotPasswordBody)
+	setIf("mail.template.ticket_created.subject", payload.MailTicketCreatedSubject)
+	setIf("mail.template.ticket_created.body", payload.MailTicketCreatedBody)
+	setIf("mail.template.ticket_reply_user.subject", payload.MailTicketReplyUserSubject)
+	setIf("mail.template.ticket_reply_user.body", payload.MailTicketReplyUserBody)
+	setIf("mail.template.ticket_reply_admin.subject", payload.MailTicketReplyAdminSubject)
+	setIf("mail.template.ticket_reply_admin.body", payload.MailTicketReplyAdminBody)
+	setIf("mail.template.ticket_status.subject", payload.MailTicketStatusSubject)
+	setIf("mail.template.ticket_status.body", payload.MailTicketStatusBody)
+
+	setBoolIf("mail.register.verify", payload.EnableRegisterVerify)
+	setBoolIf("mail.login.notification", payload.EnableLoginNotification)
+	setBoolIf("mail.forgot_password.enabled", payload.EnableForgotPassword)
+	setBoolIf("mail.forgot_password.turnstile", payload.EnableForgotPasswordTurnstile)
+	setBoolIf("mail.forgot_password.turnstile_request", payload.EnableForgotPasswordTurnstileRequest)
+	setBoolIf("mail.forgot_password.turnstile_reset", payload.EnableForgotPasswordTurnstileReset)
+
+	if len(values) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": "updated"})
+		return
 	}
 
 	if err := s.admin.UpdateSettings(c.Request.Context(), values); err != nil {
@@ -608,11 +825,31 @@ func (s *Server) handleAdminCaptchaSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": resp})
 }
 
+// captchaSettingsUpdatePayload 用于 PATCH 部分更新：指针字段出现时才写入，未出现字段保持原值。
+type captchaSettingsUpdatePayload struct {
+	EnableCaptcha                      *bool   `json:"enableCaptcha"`
+	CaptchaProvider                    *string `json:"captchaProvider"`
+	CloudflareSiteKey                  *string `json:"cloudflareSiteKey"`
+	CloudflareSecretKey                *string `json:"cloudflareSecretKey"`
+	GeetestCaptchaID                   *string `json:"geetestCaptchaId"`
+	GeetestCaptchaKey                  *string `json:"geetestCaptchaKey"`
+	CapInstanceURL                     *string `json:"capInstanceUrl"`
+	CapSiteKey                         *string `json:"capSiteKey"`
+	CapSecretKey                       *string `json:"capSecretKey"`
+	EnableLoginCaptcha                 *bool   `json:"enableLoginCaptcha"`
+	EnableRegisterCaptcha              *bool   `json:"enableRegisterCaptcha"`
+	EnableRegisterVerifyCaptcha        *bool   `json:"enableRegisterVerifyCaptcha"`
+	EnableForgotPasswordRequestCaptcha *bool   `json:"enableForgotPasswordRequestCaptcha"`
+	EnableForgotPasswordResetCaptcha   *bool   `json:"enableForgotPasswordResetCaptcha"`
+	EnableRedeemCaptcha                *bool   `json:"enableRedeemCaptcha"`
+	EnableTicketCaptcha                *bool   `json:"enableTicketCaptcha"`
+}
+
 func (s *Server) handleAdminUpdateCaptchaSettings(c *gin.Context) {
 	if !requireSuperAdmin(c) {
 		return
 	}
-	var payload captchaSettingsPayload
+	var payload captchaSettingsUpdatePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -624,112 +861,167 @@ func (s *Server) handleAdminUpdateCaptchaSettings(c *gin.Context) {
 		return
 	}
 
-	// 处理密钥 "***" 保留逻辑
-	cloudflareSecretKey := strings.TrimSpace(payload.CloudflareSecretKey)
-	if cloudflareSecretKey == "" || cloudflareSecretKey == "***" {
-		cloudflareSecretKey = settings["captcha.cloudflare.secret_key"]
-	}
-	geetestCaptchaKey := strings.TrimSpace(payload.GeetestCaptchaKey)
-	if geetestCaptchaKey == "" || geetestCaptchaKey == "***" {
-		geetestCaptchaKey = settings["captcha.geetest.captcha_key"]
-	}
-	capSecretKey := strings.TrimSpace(payload.CapSecretKey)
-	if capSecretKey == "" || capSecretKey == "***" {
-		capSecretKey = settings["captcha.cap.secret_key"]
-	}
-	capInstanceURL := strings.TrimSpace(payload.CapInstanceURL)
-	if capInstanceURL != "" {
-		if normalized, err := captcha.NormalizeCapInstanceURL(capInstanceURL); err == nil {
-			capInstanceURL = normalized
-		}
-	}
-	capSiteKey := strings.TrimSpace(payload.CapSiteKey)
+	values := map[string]string{}
 
-	// 检测配置变更
-	currentCloudflareSiteKey := settings["captcha.cloudflare.site_key"]
-	currentCloudflareSecretKey := settings["captcha.cloudflare.secret_key"]
-	currentGeetestCaptchaID := settings["captcha.geetest.captcha_id"]
-	currentGeetestCaptchaKey := settings["captcha.geetest.captcha_key"]
-	currentCapInstanceURL := settings["captcha.cap.instance_url"]
+	// 解析各提供商密钥："***" 或空串（未新增密钥）时保持原值；未提供该字段则不处理。
+	resolveSecret := func(current string, provided *string) (string, bool) {
+		if provided == nil {
+			return current, false
+		}
+		v := strings.TrimSpace(*provided)
+		if v == "" || v == "***" {
+			return current, true
+		}
+		return v, true
+	}
+
+	// Cloudflare
+	currentCFSiteKey := settings["captcha.cloudflare.site_key"]
+	currentCFSecret := settings["captcha.cloudflare.secret_key"]
+	cfSiteKey := currentCFSiteKey
+	if payload.CloudflareSiteKey != nil {
+		cfSiteKey = *payload.CloudflareSiteKey
+		values["captcha.cloudflare.site_key"] = cfSiteKey
+	}
+	cfSecret, cfSecretProvided := resolveSecret(currentCFSecret, payload.CloudflareSecretKey)
+	if cfSecretProvided {
+		values["captcha.cloudflare.secret_key"] = cfSecret
+	}
+	cfChanged := (payload.CloudflareSiteKey != nil && cfSiteKey != currentCFSiteKey) ||
+		(payload.CloudflareSecretKey != nil && cfSecret != currentCFSecret)
+
+	// Geetest
+	currentGtID := settings["captcha.geetest.captcha_id"]
+	currentGtKey := settings["captcha.geetest.captcha_key"]
+	gtID := currentGtID
+	if payload.GeetestCaptchaID != nil {
+		gtID = *payload.GeetestCaptchaID
+		values["captcha.geetest.captcha_id"] = gtID
+	}
+	gtKey, gtKeyProvided := resolveSecret(currentGtKey, payload.GeetestCaptchaKey)
+	if gtKeyProvided {
+		values["captcha.geetest.captcha_key"] = gtKey
+	}
+	gtChanged := (payload.GeetestCaptchaID != nil && gtID != currentGtID) ||
+		(payload.GeetestCaptchaKey != nil && gtKey != currentGtKey)
+
+	// Cap
+	currentCapInstance := settings["captcha.cap.instance_url"]
 	currentCapSiteKey := settings["captcha.cap.site_key"]
-	currentCapSecretKey := settings["captcha.cap.secret_key"]
+	currentCapSecret := settings["captcha.cap.secret_key"]
+	capInstance := currentCapInstance
+	if payload.CapInstanceURL != nil {
+		capInstance = strings.TrimSpace(*payload.CapInstanceURL)
+		if capInstance != "" {
+			if normalized, err := captcha.NormalizeCapInstanceURL(capInstance); err == nil {
+				capInstance = normalized
+			}
+		}
+		values["captcha.cap.instance_url"] = capInstance
+	}
+	capSite := currentCapSiteKey
+	if payload.CapSiteKey != nil {
+		capSite = strings.TrimSpace(*payload.CapSiteKey)
+		values["captcha.cap.site_key"] = capSite
+	}
+	capSecret, capSecretProvided := resolveSecret(currentCapSecret, payload.CapSecretKey)
+	if capSecretProvided {
+		values["captcha.cap.secret_key"] = capSecret
+	}
+	capChanged := (payload.CapInstanceURL != nil && capInstance != currentCapInstance) ||
+		(payload.CapSiteKey != nil && capSite != currentCapSiteKey) ||
+		(payload.CapSecretKey != nil && capSecret != currentCapSecret)
 
-	cloudflareConfigChanged := payload.CloudflareSiteKey != currentCloudflareSiteKey || cloudflareSecretKey != currentCloudflareSecretKey
-	geetestConfigChanged := payload.GeetestCaptchaID != currentGeetestCaptchaID || geetestCaptchaKey != currentGeetestCaptchaKey
-	capConfigChanged := capInstanceURL != currentCapInstanceURL || capSiteKey != currentCapSiteKey || capSecretKey != currentCapSecretKey
+	// 场景开关
+	setBoolIf := func(configKey string, v *bool) {
+		if v != nil {
+			values[configKey] = strconv.FormatBool(*v)
+		}
+	}
+	if payload.EnableCaptcha != nil {
+		values["captcha.enabled"] = strconv.FormatBool(*payload.EnableCaptcha)
+	}
+	if payload.CaptchaProvider != nil {
+		values["captcha.provider"] = *payload.CaptchaProvider
+	}
+	setBoolIf("captcha.login", payload.EnableLoginCaptcha)
+	setBoolIf("captcha.register", payload.EnableRegisterCaptcha)
+	setBoolIf("captcha.register_verify", payload.EnableRegisterVerifyCaptcha)
+	setBoolIf("captcha.forgot_password_request", payload.EnableForgotPasswordRequestCaptcha)
+	setBoolIf("captcha.forgot_password_reset", payload.EnableForgotPasswordResetCaptcha)
+	setBoolIf("captcha.redeem", payload.EnableRedeemCaptcha)
+	setBoolIf("captcha.ticket", payload.EnableTicketCaptcha)
 
-	// 当验证码启用时，检查所选提供商是否已验证
-	if payload.EnableCaptcha {
-		if payload.CaptchaProvider == "cloudflare" {
-			if payload.CloudflareSiteKey == "" || cloudflareSecretKey == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "使用 Cloudflare 验证时必须填写 Site Key 和 Secret Key"})
-				return
+	// 当验证码启用且本次请求包含提供商相关变更时，检查所选提供商是否已验证
+	providerFieldsProvided := payload.EnableCaptcha != nil || payload.CaptchaProvider != nil ||
+		payload.CloudflareSiteKey != nil || payload.CloudflareSecretKey != nil ||
+		payload.GeetestCaptchaID != nil || payload.GeetestCaptchaKey != nil ||
+		payload.CapInstanceURL != nil || payload.CapSiteKey != nil || payload.CapSecretKey != nil
+	if providerFieldsProvided {
+		effectiveEnabled := settings["captcha.enabled"] == "true"
+		if payload.EnableCaptcha != nil {
+			effectiveEnabled = *payload.EnableCaptcha
+		}
+		if effectiveEnabled {
+			provider := strings.TrimSpace(settings["captcha.provider"])
+			if payload.CaptchaProvider != nil {
+				provider = *payload.CaptchaProvider
 			}
-			newCloudflareSig := captcha.GenerateSignature(payload.CloudflareSiteKey, cloudflareSecretKey)
-			if newCloudflareSig == "" || settings["captcha.cloudflare.last_verified_signature"] != newCloudflareSig {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Cloudflare 配置已变更或未验证，请先点击测试并验证成功后再保存"})
-				return
-			}
-		} else if payload.CaptchaProvider == "geetest" {
-			if payload.GeetestCaptchaID == "" || geetestCaptchaKey == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "使用极验验证时必须填写 Captcha ID 和 Captcha Key"})
-				return
-			}
-			newGeetestSig := captcha.GenerateGeetestSignature(payload.GeetestCaptchaID, geetestCaptchaKey)
-			if newGeetestSig == "" || settings["captcha.geetest.last_verified_signature"] != newGeetestSig {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "极验配置已变更或未验证，请先点击测试并验证成功后再保存"})
-				return
-			}
-		} else if payload.CaptchaProvider == "cap" {
-			if capInstanceURL == "" || capSiteKey == "" || capSecretKey == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "使用 Cap 验证时必须填写 Instance URL、Site Key 和 Secret Key"})
-				return
-			}
-			if _, err := captcha.NormalizeCapInstanceURL(capInstanceURL); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			newCapSig := captcha.GenerateCapSignature(capInstanceURL, capSiteKey, capSecretKey)
-			if newCapSig == "" || settings["captcha.cap.last_verified_signature"] != newCapSig {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Cap 配置已变更或未验证，请先点击测试并验证成功后再保存"})
-				return
+			if provider == "cloudflare" {
+				if cfSiteKey == "" || cfSecret == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "使用 Cloudflare 验证时必须填写 Site Key 和 Secret Key"})
+					return
+				}
+				newCFSig := captcha.GenerateSignature(cfSiteKey, cfSecret)
+				if newCFSig == "" || settings["captcha.cloudflare.last_verified_signature"] != newCFSig {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "Cloudflare 配置已变更或未验证，请先点击测试并验证成功后再保存"})
+					return
+				}
+			} else if provider == "geetest" {
+				if gtID == "" || gtKey == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "使用极验验证时必须填写 Captcha ID 和 Captcha Key"})
+					return
+				}
+				newGtSig := captcha.GenerateGeetestSignature(gtID, gtKey)
+				if newGtSig == "" || settings["captcha.geetest.last_verified_signature"] != newGtSig {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "极验配置已变更或未验证，请先点击测试并验证成功后再保存"})
+					return
+				}
+			} else if provider == "cap" {
+				if capInstance == "" || capSite == "" || capSecret == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "使用 Cap 验证时必须填写 Instance URL、Site Key 和 Secret Key"})
+					return
+				}
+				if _, err := captcha.NormalizeCapInstanceURL(capInstance); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				newCapSig := captcha.GenerateCapSignature(capInstance, capSite, capSecret)
+				if newCapSig == "" || settings["captcha.cap.last_verified_signature"] != newCapSig {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "Cap 配置已变更或未验证，请先点击测试并验证成功后再保存"})
+					return
+				}
 			}
 		}
 	}
 
-	values := map[string]string{
-		"captcha.enabled":                 strconv.FormatBool(payload.EnableCaptcha),
-		"captcha.provider":                payload.CaptchaProvider,
-		"captcha.cloudflare.site_key":     payload.CloudflareSiteKey,
-		"captcha.cloudflare.secret_key":   cloudflareSecretKey,
-		"captcha.geetest.captcha_id":      payload.GeetestCaptchaID,
-		"captcha.geetest.captcha_key":     geetestCaptchaKey,
-		"captcha.cap.instance_url":        capInstanceURL,
-		"captcha.cap.site_key":            capSiteKey,
-		"captcha.cap.secret_key":          capSecretKey,
-		"captcha.login":                   strconv.FormatBool(payload.EnableLoginCaptcha),
-		"captcha.register":                strconv.FormatBool(payload.EnableRegisterCaptcha),
-		"captcha.register_verify":         strconv.FormatBool(payload.EnableRegisterVerifyCaptcha),
-		"captcha.forgot_password_request": strconv.FormatBool(payload.EnableForgotPasswordRequestCaptcha),
-		"captcha.forgot_password_reset":   strconv.FormatBool(payload.EnableForgotPasswordResetCaptcha),
-		"captcha.redeem":                  strconv.FormatBool(payload.EnableRedeemCaptcha),
-		"captcha.ticket":                  strconv.FormatBool(payload.EnableTicketCaptcha),
-	}
-
-	// Cloudflare 配置变更时清除验证状态
-	if cloudflareConfigChanged {
+	// 提供商配置变更时清除对应验证状态
+	if cfChanged {
 		values["captcha.cloudflare.last_verified_signature"] = ""
 		values["captcha.cloudflare.last_verified_at"] = ""
 	}
-	// Geetest 配置变更时清除验证状态
-	if geetestConfigChanged {
+	if gtChanged {
 		values["captcha.geetest.last_verified_signature"] = ""
 		values["captcha.geetest.last_verified_at"] = ""
 	}
-	// Cap 配置变更时清除验证状态
-	if capConfigChanged {
+	if capChanged {
 		values["captcha.cap.last_verified_signature"] = ""
 		values["captcha.cap.last_verified_at"] = ""
+	}
+
+	if len(values) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": "updated"})
+		return
 	}
 
 	if err := s.admin.UpdateSettings(c.Request.Context(), values); err != nil {
@@ -804,85 +1096,162 @@ func (s *Server) handleAdminOAuthSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": payload})
 }
 
+// oauthProviderUpdateSettings 用于 OAuth 提供商的部分更新：指针字段出现时才写入。
+type oauthProviderUpdateSettings struct {
+	Enabled      *bool   `json:"enabled"`
+	ClientID     *string `json:"clientId"`
+	ClientSecret *string `json:"clientSecret"`
+	Name         *string `json:"name,omitempty"`
+	AuthURL      *string `json:"authUrl,omitempty"`
+	TokenURL     *string `json:"tokenUrl,omitempty"`
+	UserInfoURL  *string `json:"userInfoUrl,omitempty"`
+	Scopes       *string `json:"scopes,omitempty"`
+}
+
+type oauthSettingsUpdatePayload struct {
+	Enabled         *bool                       `json:"enabled"`
+	AutoLinkByEmail *bool                       `json:"autoLinkByEmail"`
+	GitHub          *oauthProviderUpdateSettings `json:"github"`
+	Google          *oauthProviderUpdateSettings `json:"google"`
+	Discord         *oauthProviderUpdateSettings `json:"discord"`
+	Custom          *oauthProviderUpdateSettings `json:"custom"`
+}
+
 func (s *Server) handleAdminUpdateOAuthSettings(c *gin.Context) {
 	if !requireSuperAdmin(c) {
 		return
 	}
-	var payload oauthSettingsPayload
+	var payload oauthSettingsUpdatePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	settings, _ := s.admin.GetSettings(c.Request.Context())
-
-	githubSecret := strings.TrimSpace(payload.GitHub.ClientSecret)
-	if githubSecret == "" || githubSecret == "***" {
-		githubSecret = settings["oauth.github.client_secret"]
-	}
-	googleSecret := strings.TrimSpace(payload.Google.ClientSecret)
-	if googleSecret == "" || googleSecret == "***" {
-		googleSecret = settings["oauth.google.client_secret"]
-	}
-	discordSecret := strings.TrimSpace(payload.Discord.ClientSecret)
-	if discordSecret == "" || discordSecret == "***" {
-		discordSecret = settings["oauth.discord.client_secret"]
-	}
-	customSecret := strings.TrimSpace(payload.Custom.ClientSecret)
-	if customSecret == "" || customSecret == "***" {
-		customSecret = settings["oauth.custom.client_secret"]
+	settings, err := s.admin.GetSettings(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
-	if payload.Enabled && payload.Custom.Enabled {
-		if strings.TrimSpace(payload.Custom.ClientID) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "自定义 OAuth 已启用，请填写 Client ID"})
+	values := map[string]string{}
+
+	// 密钥为空或 "***"（未新增密钥）时保持原值；未提供该字段则不处理。
+	resolveSecret := func(current string, provided *string) string {
+		if provided == nil {
+			return current
+		}
+		v := strings.TrimSpace(*provided)
+		if v == "" || v == "***" {
+			return current
+		}
+		return v
+	}
+
+	if payload.Enabled != nil {
+		values["oauth.enabled"] = strconv.FormatBool(*payload.Enabled)
+	}
+	if payload.AutoLinkByEmail != nil {
+		values["oauth.auto_link_by_email"] = strconv.FormatBool(*payload.AutoLinkByEmail)
+	}
+
+	writeProvider := func(prefix string, p *oauthProviderUpdateSettings) {
+		if p == nil {
 			return
 		}
-		if customSecret == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "自定义 OAuth 已启用，请填写 Client Secret"})
-			return
+		if p.Enabled != nil {
+			values[prefix+".enabled"] = strconv.FormatBool(*p.Enabled)
 		}
-		for _, item := range []struct {
-			label string
-			value string
-		}{
-			{"Auth URL", payload.Custom.AuthURL},
-			{"Token URL", payload.Custom.TokenURL},
-			{"UserInfo URL", payload.Custom.UserInfoURL},
-		} {
-			u, err := url.Parse(strings.TrimSpace(item.value))
-			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": item.label + " 必须是完整 http(s) 地址，例如 https://casdoor.example.com/login/oauth/authorize"})
+		if p.ClientID != nil {
+			values[prefix+".client_id"] = strings.TrimSpace(*p.ClientID)
+		}
+		if p.ClientSecret != nil {
+			values[prefix+".client_secret"] = resolveSecret(settings[prefix+".client_secret"], p.ClientSecret)
+		}
+		if p.Name != nil {
+			values[prefix+".name"] = strings.TrimSpace(*p.Name)
+		}
+		if p.AuthURL != nil {
+			values[prefix+".auth_url"] = strings.TrimRight(strings.TrimSpace(*p.AuthURL), "?&")
+		}
+		if p.TokenURL != nil {
+			values[prefix+".token_url"] = strings.TrimRight(strings.TrimSpace(*p.TokenURL), "?&")
+		}
+		if p.UserInfoURL != nil {
+			values[prefix+".userinfo_url"] = strings.TrimRight(strings.TrimSpace(*p.UserInfoURL), "?&")
+		}
+		if p.Scopes != nil {
+			values[prefix+".scopes"] = firstNonEmptyTrim(*p.Scopes, "openid profile email")
+		}
+	}
+	writeProvider("oauth.github", payload.GitHub)
+	writeProvider("oauth.google", payload.Google)
+	writeProvider("oauth.discord", payload.Discord)
+	writeProvider("oauth.custom", payload.Custom)
+
+	// 自定义 OAuth 校验：仅在生效状态为启用且本次请求包含 custom 相关字段时执行。
+	if payload.Custom != nil {
+		effectiveEnabled := settings["oauth.enabled"] == "true"
+		if payload.Enabled != nil {
+			effectiveEnabled = *payload.Enabled
+		}
+		effectiveCustomEnabled := settings["oauth.custom.enabled"] == "true"
+		if payload.Custom.Enabled != nil {
+			effectiveCustomEnabled = *payload.Custom.Enabled
+		}
+
+		if effectiveEnabled && effectiveCustomEnabled {
+			clientID := settings["oauth.custom.client_id"]
+			if payload.Custom.ClientID != nil {
+				clientID = *payload.Custom.ClientID
+			}
+			customSecret := resolveSecret(settings["oauth.custom.client_secret"], payload.Custom.ClientSecret)
+			customAuthURL := settings["oauth.custom.auth_url"]
+			if payload.Custom.AuthURL != nil {
+				customAuthURL = *payload.Custom.AuthURL
+			}
+			customTokenURL := settings["oauth.custom.token_url"]
+			if payload.Custom.TokenURL != nil {
+				customTokenURL = *payload.Custom.TokenURL
+			}
+			customUserInfoURL := settings["oauth.custom.userinfo_url"]
+			if payload.Custom.UserInfoURL != nil {
+				customUserInfoURL = *payload.Custom.UserInfoURL
+			}
+
+			if strings.TrimSpace(clientID) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "自定义 OAuth 已启用，请填写 Client ID"})
 				return
 			}
-			host := strings.ToLower(u.Hostname())
-			if host == "localhost" || strings.HasSuffix(host, ".localhost") || host == "127.0.0.1" || host == "::1" || host == "metadata.google.internal" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": item.label + " 不能指向本机或元数据地址"})
+			if customSecret == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "自定义 OAuth 已启用，请填写 Client Secret"})
 				return
+			}
+			for _, item := range []struct {
+				label string
+				value string
+			}{
+				{"Auth URL", customAuthURL},
+				{"Token URL", customTokenURL},
+				{"UserInfo URL", customUserInfoURL},
+			} {
+				u, err := url.Parse(strings.TrimSpace(item.value))
+				if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": item.label + " 必须是完整 http(s) 地址，例如 https://casdoor.example.com/login/oauth/authorize"})
+					return
+				}
+				host := strings.ToLower(u.Hostname())
+				if host == "localhost" || strings.HasSuffix(host, ".localhost") || host == "127.0.0.1" || host == "::1" || host == "metadata.google.internal" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": item.label + " 不能指向本机或元数据地址"})
+					return
+				}
 			}
 		}
 	}
 
-	values := map[string]string{
-		"oauth.enabled":               strconv.FormatBool(payload.Enabled),
-		"oauth.auto_link_by_email":    strconv.FormatBool(payload.AutoLinkByEmail),
-		"oauth.github.enabled":        strconv.FormatBool(payload.GitHub.Enabled),
-		"oauth.github.client_id":      strings.TrimSpace(payload.GitHub.ClientID),
-		"oauth.github.client_secret":  githubSecret,
-		"oauth.google.enabled":        strconv.FormatBool(payload.Google.Enabled),
-		"oauth.google.client_id":      strings.TrimSpace(payload.Google.ClientID),
-		"oauth.google.client_secret":  googleSecret,
-		"oauth.discord.enabled":       strconv.FormatBool(payload.Discord.Enabled),
-		"oauth.discord.client_id":     strings.TrimSpace(payload.Discord.ClientID),
-		"oauth.discord.client_secret": discordSecret,
-		"oauth.custom.enabled":        strconv.FormatBool(payload.Custom.Enabled),
-		"oauth.custom.name":           strings.TrimSpace(payload.Custom.Name),
-		"oauth.custom.client_id":      strings.TrimSpace(payload.Custom.ClientID),
-		"oauth.custom.client_secret":  customSecret,
-		"oauth.custom.auth_url":       strings.TrimRight(strings.TrimSpace(payload.Custom.AuthURL), "?&"),
-		"oauth.custom.token_url":      strings.TrimRight(strings.TrimSpace(payload.Custom.TokenURL), "?&"),
-		"oauth.custom.userinfo_url":   strings.TrimRight(strings.TrimSpace(payload.Custom.UserInfoURL), "?&"),
-		"oauth.custom.scopes":         firstNonEmptyTrim(payload.Custom.Scopes, "openid profile email"),
+	if len(values) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": "updated"})
+		return
 	}
+
 	if err := s.admin.UpdateSettings(c.Request.Context(), values); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

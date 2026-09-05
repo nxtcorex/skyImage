@@ -19,7 +19,8 @@ import {
   fetchCaptchaSettings,
   updateCaptchaSettings,
   testCaptchaConfig,
-  type CaptchaSettings
+  type CaptchaSettings,
+  type CaptchaSettingsUpdate
 } from "@/lib/api";
 import { SplashScreen } from "@/components/SplashScreen";
 import { Turnstile, type TurnstileRef } from "@/components/Turnstile";
@@ -152,12 +153,20 @@ export function AdminCaptchaSettingsPage() {
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: async (input: typeof form) => {
-      await updateCaptchaSettings(input);
-      return input;
+    mutationFn: async () => {
+      if (!initialForm) return;
+      const patch: CaptchaSettingsUpdate = {};
+      (Object.keys(form) as (keyof typeof form)[]).forEach((key) => {
+        if (initialForm[key] !== form[key]) {
+          (patch as Record<string, unknown>)[key] = form[key];
+        }
+      });
+      if (Object.keys(patch).length > 0) {
+        await updateCaptchaSettings(patch);
+      }
     },
-    onSuccess: (savedForm) => {
-      setInitialForm({ ...savedForm });
+    onSuccess: () => {
+      setInitialForm({ ...form });
       queryClient.invalidateQueries({ queryKey: ["site-config"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "captcha-settings"] });
       toast.success(t("admin.captchaSettings.saved"));
@@ -930,7 +939,7 @@ export function AdminCaptchaSettingsPage() {
           {isFormDirty ? t("admin.captchaSettings.unsavedChanges") : t("admin.captchaSettings.allChangesSaved")}
         </p>
         <Button
-          onClick={() => mutation.mutate(form)}
+          onClick={() => mutation.mutate()}
           disabled={mutation.isPending || !isFormDirty}
         >
           {mutation.isPending ? t("admin.captchaSettings.saving") : t("admin.captchaSettings.saveConfig")}

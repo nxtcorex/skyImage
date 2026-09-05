@@ -294,8 +294,6 @@ export type SiteConfig = {
   notFoundHeading?: string;
   notFoundText?: string;
   notFoundHtml?: string;
-  termsOfService?: string;
-  privacyPolicy?: string;
   homePageMode?: "default" | "custom_html";
   homeCustomHtml?: string;
   enableGallery: boolean;
@@ -321,6 +319,13 @@ export async function fetchSiteConfig() {
   }
   
   return config;
+}
+
+export type LegalType = "terms" | "privacy";
+
+export async function fetchLegalContent(type: LegalType) {
+  const res = await apiClient.get<{ data: { content: string } }>(`/site/legal/${type}`);
+  return res.data.data.content;
 }
 
 export async function fetchGalleryPublic(params?: {
@@ -780,12 +785,13 @@ export type SiteSettings = {
   notFoundHeading: string;
   notFoundText: string;
   notFoundHtml: string;
-  termsOfService: string;
-  privacyPolicy: string;
   homePageMode: "default" | "custom_html";
   homeCustomHtml: string;
   accountDisabledNotice: string;
 };
+
+// 站点设置的配置文件仅用于部分更新，提交时只携带修改过的字段。
+export type SiteSettingsUpdate = Partial<Omit<SiteSettings, "termsOfService" | "privacyPolicy">>;
 
 export type OAuthProviderSettings = {
   enabled: boolean;
@@ -812,8 +818,28 @@ export async function fetchOAuthSettings() {
   return res.data.data;
 }
 
-export async function updateOAuthSettings(input: OAuthSettings) {
-  await apiClient.put("/admin/system/oauth", input);
+export type OAuthProviderSettingsUpdate = {
+  enabled?: boolean;
+  clientId?: string;
+  clientSecret?: string;
+  name?: string;
+  authUrl?: string;
+  tokenUrl?: string;
+  userInfoUrl?: string;
+  scopes?: string;
+};
+
+export type OAuthSettingsUpdate = {
+  enabled?: boolean;
+  autoLinkByEmail?: boolean;
+  github?: OAuthProviderSettingsUpdate;
+  google?: OAuthProviderSettingsUpdate;
+  discord?: OAuthProviderSettingsUpdate;
+  custom?: OAuthProviderSettingsUpdate;
+};
+
+export async function updateOAuthSettings(input: OAuthSettingsUpdate) {
+  await apiClient.patch("/admin/system/oauth", input);
 }
 
 // ── Database config & migration ──
@@ -881,8 +907,19 @@ export async function fetchSiteSettings() {
   return res.data.data;
 }
 
-export async function updateSiteSettings(input: SiteSettings) {
-  await apiClient.put("/admin/system/site", input);
+export async function updateSiteSettings(input: SiteSettingsUpdate) {
+  await apiClient.patch("/admin/system/site", input);
+}
+
+export async function fetchAdminLegalContent(type: LegalType) {
+  const res = await apiClient.get<{ data: { content: string } }>(
+    `/admin/system/site/legal/${type}`
+  );
+  return res.data.data.content;
+}
+
+export async function updateAdminLegalContent(type: LegalType, content: string) {
+  await apiClient.put(`/admin/system/site/legal/${type}`, { content });
 }
 
 // ── General Settings ──
@@ -902,6 +939,9 @@ export type GeneralSettings = {
   hiddenSidebarItems: string[];
 };
 
+// 通用设置的更新仅携带修改过的字段。
+export type GeneralSettingsUpdate = Partial<GeneralSettings>;
+
 export type TicketSettings = {
   attachmentStrategyId: number;
   emailNotifyEnabled: boolean;
@@ -914,8 +954,11 @@ export async function fetchTicketSettings() {
   return res.data.data;
 }
 
-export async function updateTicketSettings(input: TicketSettings) {
-  await apiClient.put("/admin/system/tickets", input);
+// 工单设置的更新仅携带修改过的字段。
+export type TicketSettingsUpdate = Partial<TicketSettings>;
+
+export async function updateTicketSettings(input: TicketSettingsUpdate) {
+  await apiClient.patch("/admin/system/tickets", input);
 }
 
 export async function fetchGeneralSettings() {
@@ -925,8 +968,8 @@ export async function fetchGeneralSettings() {
   return res.data.data;
 }
 
-export async function updateGeneralSettings(input: GeneralSettings) {
-  await apiClient.put("/admin/system/general", input);
+export async function updateGeneralSettings(input: GeneralSettingsUpdate) {
+  await apiClient.patch("/admin/system/general", input);
 }
 
 // ── Email Settings ──
@@ -971,8 +1014,11 @@ export async function fetchEmailSettings() {
   return res.data.data;
 }
 
-export async function updateEmailSettings(input: EmailSettings) {
-  await apiClient.put("/admin/system/email", input);
+// 邮件设置的更新仅携带修改过的字段。
+export type EmailSettingsUpdate = Partial<EmailSettings>;
+
+export async function updateEmailSettings(input: EmailSettingsUpdate) {
+  await apiClient.patch("/admin/system/email", input);
 }
 
 // ── Captcha Settings ──
@@ -1009,8 +1055,11 @@ export async function fetchCaptchaSettings() {
   return res.data.data;
 }
 
-export async function updateCaptchaSettings(input: Omit<CaptchaSettings, "cloudflareVerified" | "cloudflareLastVerifiedAt" | "geetestVerified" | "geetestLastVerifiedAt" | "capVerified" | "capLastVerifiedAt">) {
-  await apiClient.put("/admin/system/captcha", input);
+// 验证码设置的更新仅携带修改过的字段。
+export type CaptchaSettingsUpdate = Partial<Omit<CaptchaSettings, "cloudflareVerified" | "cloudflareLastVerifiedAt" | "geetestVerified" | "geetestLastVerifiedAt" | "capVerified" | "capLastVerifiedAt">>;
+
+export async function updateCaptchaSettings(input: CaptchaSettingsUpdate) {
+  await apiClient.patch("/admin/system/captcha", input);
 }
 
 // ── Test APIs ──

@@ -11,7 +11,9 @@ import {
   fetchOAuthSettings,
   updateOAuthSettings,
   type OAuthSettings,
-  type OAuthProviderSettings
+  type OAuthProviderSettings,
+  type OAuthSettingsUpdate,
+  type OAuthProviderSettingsUpdate
 } from "@/lib/api";
 import { SplashScreen } from "@/components/SplashScreen";
 import { useI18n } from "@/i18n";
@@ -164,7 +166,37 @@ export function AdminOAuthSettingsPage() {
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: updateOAuthSettings,
+    mutationFn: async () => {
+      if (!initialForm) return;
+      const patch: OAuthSettingsUpdate = {};
+      if (initialForm.enabled !== form.enabled) {
+        patch.enabled = form.enabled;
+      }
+      if (initialForm.autoLinkByEmail !== form.autoLinkByEmail) {
+        patch.autoLinkByEmail = form.autoLinkByEmail;
+      }
+      const diffProvider = (name: keyof Pick<OAuthSettings, "github" | "google" | "discord" | "custom">) => {
+        const initialProvider = initialForm[name];
+        const formProvider = form[name];
+        const providerPatch: OAuthProviderSettingsUpdate = {};
+        (Object.keys(initialProvider) as (keyof OAuthProviderSettings)[]).forEach((key) => {
+          if (initialProvider[key] !== formProvider[key]) {
+            (providerPatch as Record<string, unknown>)[key] = formProvider[key];
+          }
+        });
+        if (Object.keys(providerPatch).length > 0) {
+          patch[name] = providerPatch;
+        }
+      };
+      diffProvider("github");
+      diffProvider("google");
+      diffProvider("discord");
+      diffProvider("custom");
+
+      if (Object.keys(patch).length > 0) {
+        await updateOAuthSettings(patch);
+      }
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin", "oauth-settings"] });
       await queryClient.invalidateQueries({ queryKey: ["oauth-providers"] });
@@ -253,7 +285,7 @@ export function AdminOAuthSettingsPage() {
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={() => mutation.mutate(form)} disabled={mutation.isPending || !isFormDirty}>
+        <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || !isFormDirty}>
           {mutation.isPending ? t("common.saving") : t("admin.oauthSettings.save")}
         </Button>
       </div>
