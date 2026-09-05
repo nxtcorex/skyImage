@@ -33,6 +33,10 @@ const defaultForm: TicketSettings = {
   emailNotifyAdminIds: []
 };
 
+// 通知对象是集合语义，勾选反复切换只改变数组顺序，不改变内容。
+const sameAdminIds = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((id) => b.includes(id));
+
 export function AdminTicketSettingsPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -71,7 +75,7 @@ export function AdminTicketSettingsPage() {
       initialForm.attachmentStrategyId !== form.attachmentStrategyId ||
       initialForm.emailNotifyEnabled !== form.emailNotifyEnabled ||
       initialForm.emailNotifyMode !== form.emailNotifyMode ||
-      initialForm.emailNotifyAdminIds.join(",") !== form.emailNotifyAdminIds.join(",")
+      !sameAdminIds(initialForm.emailNotifyAdminIds, form.emailNotifyAdminIds)
     );
   }, [initialForm, form]);
 
@@ -99,7 +103,7 @@ export function AdminTicketSettingsPage() {
       if (initialForm.emailNotifyMode !== form.emailNotifyMode) {
         patch.emailNotifyMode = form.emailNotifyMode;
       }
-      if (initialForm.emailNotifyAdminIds.join(",") !== form.emailNotifyAdminIds.join(",")) {
+      if (!sameAdminIds(initialForm.emailNotifyAdminIds, form.emailNotifyAdminIds)) {
         patch.emailNotifyAdminIds = form.emailNotifyAdminIds;
       }
       if (Object.keys(patch).length > 0) {

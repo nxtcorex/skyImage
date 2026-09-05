@@ -46,6 +46,29 @@ const defaultGeneralSettingsForm: GeneralSettings = {
   hiddenSidebarItems: []
 };
 
+// 侧边栏隐藏项是集合语义，开关反复切换只改变数组顺序/引用，不改变内容。
+const sameSidebarItems = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((item) => b.includes(item));
+
+const diffGeneralSettings = (
+  a: GeneralSettings,
+  b: GeneralSettings
+): GeneralSettingsUpdate => {
+  const patch: GeneralSettingsUpdate = {};
+  (Object.keys(defaultGeneralSettingsForm) as (keyof GeneralSettings)[]).forEach((key) => {
+    if (key === "hiddenSidebarItems") {
+      if (!sameSidebarItems(a.hiddenSidebarItems, b.hiddenSidebarItems)) {
+        patch.hiddenSidebarItems = b.hiddenSidebarItems;
+      }
+      return;
+    }
+    if (a[key] !== b[key]) {
+      (patch as Record<string, unknown>)[key] = b[key];
+    }
+  });
+  return patch;
+};
+
 export function AdminSystemSettingsPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -61,8 +84,7 @@ export function AdminSystemSettingsPage() {
     if (!initialForm) {
       return false;
     }
-    const keys = Object.keys(defaultGeneralSettingsForm) as (keyof GeneralSettings)[];
-    return keys.some((key) => initialForm[key] !== form[key]);
+    return Object.keys(diffGeneralSettings(initialForm, form)).length > 0;
   }, [initialForm, form]);
 
   // 侧边栏项按分组归类，用于渲染“侧边栏配置”开关；关键页面不可隐藏，不展示开关。
@@ -95,12 +117,7 @@ export function AdminSystemSettingsPage() {
       if (!initialForm) {
         return;
       }
-      const patch: GeneralSettingsUpdate = {};
-      (Object.keys(initialForm) as (keyof GeneralSettings)[]).forEach((key) => {
-        if (initialForm[key] !== form[key]) {
-          (patch as Record<string, unknown>)[key] = form[key];
-        }
-      });
+      const patch = diffGeneralSettings(initialForm, form);
       if (Object.keys(patch).length > 0) {
         await updateGeneralSettings(patch);
       }

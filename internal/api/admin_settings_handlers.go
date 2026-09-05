@@ -1187,34 +1187,39 @@ func (s *Server) handleAdminUpdateOAuthSettings(c *gin.Context) {
 	writeProvider("oauth.discord", payload.Discord)
 	writeProvider("oauth.custom", payload.Custom)
 
-	// 自定义 OAuth 校验：仅在生效状态为启用且本次请求包含 custom 相关字段时执行。
-	if payload.Custom != nil {
+	// 自定义 OAuth 校验：生效状态为启用且本次请求涉及全局开关或 custom 字段时执行，
+	// 避免只切换全局开关时绕过完整性检查。
+	if payload.Custom != nil || payload.Enabled != nil {
 		effectiveEnabled := settings["oauth.enabled"] == "true"
 		if payload.Enabled != nil {
 			effectiveEnabled = *payload.Enabled
 		}
+		custom := payload.Custom
 		effectiveCustomEnabled := settings["oauth.custom.enabled"] == "true"
-		if payload.Custom.Enabled != nil {
-			effectiveCustomEnabled = *payload.Custom.Enabled
+		if custom != nil && custom.Enabled != nil {
+			effectiveCustomEnabled = *custom.Enabled
 		}
 
 		if effectiveEnabled && effectiveCustomEnabled {
-			clientID := settings["oauth.custom.client_id"]
-			if payload.Custom.ClientID != nil {
-				clientID = *payload.Custom.ClientID
+			if custom == nil {
+				custom = &oauthProviderUpdateSettings{}
 			}
-			customSecret := resolveSecret(settings["oauth.custom.client_secret"], payload.Custom.ClientSecret)
+			clientID := settings["oauth.custom.client_id"]
+			if custom.ClientID != nil {
+				clientID = *custom.ClientID
+			}
+			customSecret := resolveSecret(settings["oauth.custom.client_secret"], custom.ClientSecret)
 			customAuthURL := settings["oauth.custom.auth_url"]
-			if payload.Custom.AuthURL != nil {
-				customAuthURL = *payload.Custom.AuthURL
+			if custom.AuthURL != nil {
+				customAuthURL = *custom.AuthURL
 			}
 			customTokenURL := settings["oauth.custom.token_url"]
-			if payload.Custom.TokenURL != nil {
-				customTokenURL = *payload.Custom.TokenURL
+			if custom.TokenURL != nil {
+				customTokenURL = *custom.TokenURL
 			}
 			customUserInfoURL := settings["oauth.custom.userinfo_url"]
-			if payload.Custom.UserInfoURL != nil {
-				customUserInfoURL = *payload.Custom.UserInfoURL
+			if custom.UserInfoURL != nil {
+				customUserInfoURL = *custom.UserInfoURL
 			}
 
 			if strings.TrimSpace(clientID) == "" {
