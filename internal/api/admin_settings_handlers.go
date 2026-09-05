@@ -45,12 +45,6 @@ type siteSettingsPayload struct {
 	PrivacyPolicy         string `json:"privacyPolicy"`
 	HomePageMode          string `json:"homePageMode"`
 	HomeCustomHTML        string `json:"homeCustomHtml"`
-	EnableGallery         bool   `json:"enableGallery"`
-	EnableHome            bool   `json:"enableHome"`
-	EnableApi             bool   `json:"enableApi"`
-	EnablePasskey         bool   `json:"enablePasskey"`
-	AllowRegistration     bool   `json:"allowRegistration"` // legacy, derived from registrationMode
-	RegistrationMode      string `json:"registrationMode"`  // open | oauth_only | closed
 	AccountDisabledNotice string `json:"accountDisabledNotice"`
 }
 
@@ -81,7 +75,6 @@ func (s *Server) handleAdminSiteSettings(c *gin.Context) {
 		disabledNotice = defaultAccountDisabledNotice
 	}
 
-	regMode := s.registrationMode(settings)
 	payload := siteSettingsPayload{
 		SiteTitle:             settings["site.title"],
 		ConsoleURL:            consoleURL,
@@ -98,12 +91,6 @@ func (s *Server) handleAdminSiteSettings(c *gin.Context) {
 		PrivacyPolicy:         settings["site.privacy_policy"],
 		HomePageMode:          homePageMode,
 		HomeCustomHTML:        homeCustomHTML,
-		EnableGallery:         settings["features.gallery"] != "false",
-		EnableHome:            settings["features.home"] != "false",
-		EnableApi:             settings["features.api"] != "false",
-		EnablePasskey:         settings["features.passkeys_enabled"] != "false",
-		AllowRegistration:     regMode != "closed",
-		RegistrationMode:      regMode,
 		AccountDisabledNotice: disabledNotice,
 	}
 	c.JSON(http.StatusOK, gin.H{"data": payload})
@@ -132,40 +119,23 @@ func (s *Server) handleAdminUpdateSiteSettings(c *gin.Context) {
 		homeCustomHTML = payload.HomeCustomHTML
 	}
 
-	regMode := strings.ToLower(strings.TrimSpace(payload.RegistrationMode))
-	switch regMode {
-	case "open", "oauth_only", "closed":
-	default:
-		// Backward compatible: allowRegistration bool only
-		if payload.AllowRegistration {
-			regMode = "open"
-		} else {
-			regMode = "closed"
-		}
-	}
 	values := map[string]string{
-		"site.title":                  payload.SiteTitle,
-		"site.console_url":            payload.ConsoleURL,
-		"site.description":            payload.SiteDescription,
-		"site.slogan":                 payload.SiteSlogan,
-		"site.logo":                   payload.SiteLogo,
-		"site.about":                  payload.About,
-		"site.about_title":            payload.AboutTitle,
-		"site.notfound_mode":          payload.NotFoundMode,
-		"site.notfound_heading":       payload.NotFoundHeading,
-		"site.notfound_text":          payload.NotFoundText,
-		"site.notfound_html":          payload.NotFoundHtml,
-		"site.terms_of_service":       payload.TermsOfService,
-		"site.privacy_policy":         payload.PrivacyPolicy,
-		"site.home_page_mode":         homePageMode,
-		"site.home_custom_html":       homeCustomHTML,
-		"features.gallery":            strconv.FormatBool(payload.EnableGallery),
-		"features.home":               strconv.FormatBool(payload.EnableHome),
-		"features.api":                strconv.FormatBool(payload.EnableApi),
-		"features.registration_mode":  regMode,
-		"features.allow_registration": strconv.FormatBool(regMode != "closed"),
-		"features.passkeys_enabled":   strconv.FormatBool(payload.EnablePasskey),
-		"account.disabled_notice":     notice,
+		"site.title":              payload.SiteTitle,
+		"site.console_url":        payload.ConsoleURL,
+		"site.description":        payload.SiteDescription,
+		"site.slogan":             payload.SiteSlogan,
+		"site.logo":               payload.SiteLogo,
+		"site.about":              payload.About,
+		"site.about_title":        payload.AboutTitle,
+		"site.notfound_mode":      payload.NotFoundMode,
+		"site.notfound_heading":   payload.NotFoundHeading,
+		"site.notfound_text":      payload.NotFoundText,
+		"site.notfound_html":      payload.NotFoundHtml,
+		"site.terms_of_service":   payload.TermsOfService,
+		"site.privacy_policy":     payload.PrivacyPolicy,
+		"site.home_page_mode":     homePageMode,
+		"site.home_custom_html":   homeCustomHTML,
+		"account.disabled_notice": notice,
 	}
 
 	oldSettings, _ := s.admin.GetSettings(c.Request.Context())
@@ -192,12 +162,51 @@ func (s *Server) handleAdminUpdateSiteSettings(c *gin.Context) {
 // General Settings (GET/PUT /admin/system/general)
 // ---------------------------------------------------------------------------
 
+// ConfigSidebarHidden 记录被隐藏的侧边栏 URL 路径（以逗号分隔，自然给所有用户读取）。
+const ConfigSidebarHidden = "navigation.sidebar.hidden"
+
+// allowedHiddenSidebarURLs 是后端可接受隐藏的侧边栏 URL 白名单，
+// 对应前端 HIDEABLE_SIDEBAR_ITEMS 中非 critical 的项。关键页面与未列入白名单的路径一律拒绝，
+// 防止绕过前端防御把任意路径写入隐藏配置。
+var allowedHiddenSidebarURLs = map[string]struct{}{
+	"/dashboard/shop":               {},
+	"/dashboard/orders":             {},
+	"/dashboard/tickets":            {},
+	"/dashboard/notifications":      {},
+	"/shop":                         {},
+	"/dashboard/gallery":            {},
+	"/dashboard/admin/audits":       {},
+	"/dashboard/admin/redeem-codes": {},
+	"/dashboard/admin/shop/products": {},
+	"/dashboard/admin/shop/orders":   {},
+	"/dashboard/admin/tickets":       {},
+}
+
 type generalSettingsPayload struct {
-	ImageLoadRows                 int    `json:"imageLoadRows"`
-	UserNotificationLimit         int    `json:"userNotificationLimit"`
-	AdminImageDeleteDefaultReason string `json:"adminImageDeleteDefaultReason"`
-	SystemAutoDeleteDefaultReason string `json:"systemAutoDeleteDefaultReason"`
-	EnableCDN                     bool   `json:"enableCDN"`
+	ImageLoadRows                 int      `json:"imageLoadRows"`
+	UserNotificationLimit         int      `json:"userNotificationLimit"`
+	AdminImageDeleteDefaultReason string   `json:"adminImageDeleteDefaultReason"`
+	SystemAutoDeleteDefaultReason string   `json:"systemAutoDeleteDefaultReason"`
+	EnableCDN                     bool     `json:"enableCDN"`
+	EnableGallery                 bool     `json:"enableGallery"`
+	EnableHome                    bool     `json:"enableHome"`
+	EnableApi                     bool     `json:"enableApi"`
+	EnablePasskey                 bool     `json:"enablePasskey"`
+	AllowRegistration             bool     `json:"allowRegistration"` // legacy, derived from registrationMode
+	RegistrationMode              string   `json:"registrationMode"`  // open | oauth_only | closed
+	HiddenSidebarItems            []string `json:"hiddenSidebarItems"`
+}
+
+// splitConfigList 将逗号分隔的配置字符串解析为去空项后的切片。
+func splitConfigList(raw string) []string {
+	out := []string{}
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func (s *Server) handleAdminGeneralSettings(c *gin.Context) {
@@ -210,12 +219,20 @@ func (s *Server) handleAdminGeneralSettings(c *gin.Context) {
 		return
 	}
 
+	regMode := s.registrationMode(settings)
 	payload := generalSettingsPayload{
 		ImageLoadRows:                 normalizeImageLoadRows(settings["images.load_rows"]),
 		UserNotificationLimit:         notifications.NormalizeRetentionLimit(settings[notifications.ConfigUserRetentionLimit]),
 		AdminImageDeleteDefaultReason: notifications.NormalizeAdminDeleteReason(settings[notifications.ConfigAdminImageDeleteReason]),
 		SystemAutoDeleteDefaultReason: notifications.NormalizeSystemAutoDeleteReason(settings[notifications.ConfigSystemAutoDeleteReason]),
 		EnableCDN:                     settings["mail.cdn.enabled"] == "true",
+		EnableGallery:                 settings["features.gallery"] != "false",
+		EnableHome:                    settings["features.home"] != "false",
+		EnableApi:                     settings["features.api"] != "false",
+		EnablePasskey:                 settings["features.passkeys_enabled"] != "false",
+		AllowRegistration:             regMode != "closed",
+		RegistrationMode:              regMode,
+		HiddenSidebarItems:            splitConfigList(settings[ConfigSidebarHidden]),
 	}
 	c.JSON(http.StatusOK, gin.H{"data": payload})
 }
@@ -233,12 +250,48 @@ func (s *Server) handleAdminUpdateGeneralSettings(c *gin.Context) {
 	adminDeleteReason := notifications.NormalizeAdminDeleteReason(payload.AdminImageDeleteDefaultReason)
 	systemAutoDeleteReason := notifications.NormalizeSystemAutoDeleteReason(payload.SystemAutoDeleteDefaultReason)
 
+	regMode := strings.ToLower(strings.TrimSpace(payload.RegistrationMode))
+	switch regMode {
+	case "open", "oauth_only", "closed":
+	default:
+		// Backward compatible: allowRegistration bool only
+		if payload.AllowRegistration {
+			regMode = "open"
+		} else {
+			regMode = "closed"
+		}
+	}
+
+	hiddenItems := make([]string, 0, len(payload.HiddenSidebarItems))
+	seen := make(map[string]struct{}, len(payload.HiddenSidebarItems))
+	for _, item := range payload.HiddenSidebarItems {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, ok := allowedHiddenSidebarURLs[item]; !ok {
+			continue
+		}
+		if _, dup := seen[item]; dup {
+			continue
+		}
+		seen[item] = struct{}{}
+		hiddenItems = append(hiddenItems, item)
+	}
+
 	values := map[string]string{
 		"images.load_rows":                         strconv.Itoa(normalizeImageLoadRowsValue(payload.ImageLoadRows)),
 		notifications.ConfigUserRetentionLimit:     strconv.Itoa(normalizeUserNotificationLimit(payload.UserNotificationLimit)),
 		notifications.ConfigAdminImageDeleteReason: adminDeleteReason,
 		notifications.ConfigSystemAutoDeleteReason: systemAutoDeleteReason,
 		"mail.cdn.enabled":                         strconv.FormatBool(payload.EnableCDN),
+		"features.gallery":                         strconv.FormatBool(payload.EnableGallery),
+		"features.home":                            strconv.FormatBool(payload.EnableHome),
+		"features.api":                             strconv.FormatBool(payload.EnableApi),
+		"features.passkeys_enabled":                strconv.FormatBool(payload.EnablePasskey),
+		"features.registration_mode":               regMode,
+		"features.allow_registration":              strconv.FormatBool(regMode != "closed"),
+		ConfigSidebarHidden:                        strings.Join(hiddenItems, ","),
 	}
 
 	if err := s.admin.UpdateSettings(c.Request.Context(), values); err != nil {

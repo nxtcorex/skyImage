@@ -301,6 +301,7 @@ export type SiteConfig = {
   enableGallery: boolean;
   enableHome?: boolean;
   enableApi: boolean;
+  hiddenSidebarItems?: string[];
   forgotPasswordEnabled?: boolean;
   forgotPasswordTurnstileRequest?: boolean;
   forgotPasswordTurnstileReset?: boolean;
@@ -783,12 +784,6 @@ export type SiteSettings = {
   privacyPolicy: string;
   homePageMode: "default" | "custom_html";
   homeCustomHtml: string;
-  enableGallery: boolean;
-  enableHome: boolean;
-  enableApi: boolean;
-  enablePasskey: boolean;
-  allowRegistration: boolean;
-  registrationMode: RegistrationMode;
   accountDisabledNotice: string;
 };
 
@@ -898,6 +893,13 @@ export type GeneralSettings = {
   adminImageDeleteDefaultReason: string;
   systemAutoDeleteDefaultReason: string;
   enableCDN: boolean;
+  enableGallery: boolean;
+  enableHome: boolean;
+  enableApi: boolean;
+  enablePasskey: boolean;
+  allowRegistration: boolean;
+  registrationMode: RegistrationMode;
+  hiddenSidebarItems: string[];
 };
 
 export type TicketSettings = {

@@ -79,6 +79,7 @@ func (s *Server) handleSiteConfig(c *gin.Context) {
 		"forgotPasswordTurnstileReset":   settings["mail.forgot_password.turnstile_reset"] == "true",
 		"version":                        status.Version,
 		"accountDisabledNotice":          disabledNotice,
+		"hiddenSidebarItems":             splitConfigList(settings[ConfigSidebarHidden]),
 	}
 	c.JSON(http.StatusOK, gin.H{"data": response})
 }

@@ -61,6 +61,7 @@ import { SiteMetaWatcher } from "@/components/SiteMetaWatcher";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import { Button } from "@/components/ui/button";
 import { NotFoundPage } from "@/features/misc/NotFoundPage";
+import { HiddenRoute } from "@/components/layout/HiddenRoute";
 import { HomePage } from "@/features/home/HomePage";
 import { SearchProvider } from "@/context/search-provider";
 import { useI18n } from "@/i18n";
@@ -167,7 +168,16 @@ export default function App() {
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         {installed && <Route path="/u/:id" element={<PublicUserPage />} />}
-        {installed && <Route path="/shop" element={<PublicShopPage />} />}
+        {installed && (
+          <Route
+            path="/shop"
+            element={
+              <HiddenRoute url="/shop">
+                <PublicShopPage />
+              </HiddenRoute>
+            }
+          />
+        )}
         {installed && <Route path="/" element={<HomeEntry />} />}
         {installed && (
           <Route element={<ProtectedRoute />}>
@@ -175,14 +185,14 @@ export default function App() {
               <Route index element={<DashboardPage />} />
               <Route path="upload" element={<UploadPage />} />
               <Route path="images" element={<MyImagesPage />} />
-              <Route path="shop" element={<ShopPage />} />
-              <Route path="orders" element={<OrdersPage />} />
-              <Route path="tickets" element={<TicketsPage />} />
-              <Route path="tickets/new" element={<TicketCreatePage />} />
-              <Route path="tickets/:id" element={<TicketDetailPage />} />
+              <Route path="shop" element={<HiddenRoute url="/dashboard/shop"><ShopPage /></HiddenRoute>} />
+              <Route path="orders" element={<HiddenRoute url="/dashboard/orders"><OrdersPage /></HiddenRoute>} />
+              <Route path="tickets" element={<HiddenRoute url="/dashboard/tickets"><TicketsPage /></HiddenRoute>} />
+              <Route path="tickets/new" element={<HiddenRoute url="/dashboard/tickets"><TicketCreatePage /></HiddenRoute>} />
+              <Route path="tickets/:id" element={<HiddenRoute url="/dashboard/tickets"><TicketDetailPage /></HiddenRoute>} />
               <Route path="settings" element={<ProfileSettingsPage />} />
-              <Route path="notifications" element={<NotificationsPage />} />
-              <Route path="gallery" element={<GalleryPage />} />
+              <Route path="notifications" element={<HiddenRoute url="/dashboard/notifications"><NotificationsPage /></HiddenRoute>} />
+              <Route path="gallery" element={<HiddenRoute url="/dashboard/gallery"><GalleryPage /></HiddenRoute>} />
               <Route path="api" element={<ApiDocsPage />} />
               <Route path="api-tokens" element={<ApiTokensPage />} />
               <Route path="api-tokens/new" element={<ApiTokenEditorPage />} />
@@ -195,21 +205,21 @@ export default function App() {
                 <Route path="admin/groups" element={<AdminGroupsPage />} />
                 <Route path="admin/groups/new" element={<AdminGroupEditorPage />} />
                 <Route path="admin/groups/:id" element={<AdminGroupEditorPage />} />
-                <Route path="admin/redeem-codes" element={<AdminRedeemCodesPage />} />
-                <Route path="admin/redeem-codes/new" element={<AdminRedeemCodeEditorPage />} />
-                <Route path="admin/shop/products" element={<AdminShopProductsPage />} />
-                <Route path="admin/shop/products/new" element={<AdminShopProductEditorPage />} />
-                <Route path="admin/shop/products/:id" element={<AdminShopProductEditorPage />} />
-                <Route path="admin/shop/orders" element={<AdminShopOrdersPage />} />
-                <Route path="admin/tickets" element={<AdminTicketsPage />} />
-                <Route path="admin/tickets/:id" element={<AdminTicketDetailPage />} />
+                <Route path="admin/redeem-codes" element={<HiddenRoute url="/dashboard/admin/redeem-codes"><AdminRedeemCodesPage /></HiddenRoute>} />
+                <Route path="admin/redeem-codes/new" element={<HiddenRoute url="/dashboard/admin/redeem-codes"><AdminRedeemCodeEditorPage /></HiddenRoute>} />
+                <Route path="admin/shop/products" element={<HiddenRoute url="/dashboard/admin/shop/products"><AdminShopProductsPage /></HiddenRoute>} />
+                <Route path="admin/shop/products/new" element={<HiddenRoute url="/dashboard/admin/shop/products"><AdminShopProductEditorPage /></HiddenRoute>} />
+                <Route path="admin/shop/products/:id" element={<HiddenRoute url="/dashboard/admin/shop/products"><AdminShopProductEditorPage /></HiddenRoute>} />
+                <Route path="admin/shop/orders" element={<HiddenRoute url="/dashboard/admin/shop/orders"><AdminShopOrdersPage /></HiddenRoute>} />
+                <Route path="admin/tickets" element={<HiddenRoute url="/dashboard/admin/tickets"><AdminTicketsPage /></HiddenRoute>} />
+                <Route path="admin/tickets/:id" element={<HiddenRoute url="/dashboard/admin/tickets"><AdminTicketDetailPage /></HiddenRoute>} />
                 <Route path="admin/users" element={<UserManagementPage />} />
                 <Route path="admin/users/new" element={<AdminUserCreatePage />} />
                 <Route path="admin/users/:id" element={<AdminUserDetailPage />} />
                 <Route path="admin/images" element={<AdminImagesPage />} />
-                <Route path="admin/audits" element={<AdminAuditsPage />} />
-                <Route path="admin/audits/new" element={<AdminAuditEditorPage />} />
-                <Route path="admin/audits/:id" element={<AdminAuditEditorPage />} />
+                <Route path="admin/audits" element={<HiddenRoute url="/dashboard/admin/audits"><AdminAuditsPage /></HiddenRoute>} />
+                <Route path="admin/audits/new" element={<HiddenRoute url="/dashboard/admin/audits"><AdminAuditEditorPage /></HiddenRoute>} />
+                <Route path="admin/audits/:id" element={<HiddenRoute url="/dashboard/admin/audits"><AdminAuditEditorPage /></HiddenRoute>} />
                 <Route path="admin/strategies" element={<AdminStrategiesPage />} />
                 <Route path="admin/strategies/new" element={<AdminStrategyEditorPage />} />
                 <Route path="admin/strategies/:id" element={<AdminStrategyEditorPage />} />

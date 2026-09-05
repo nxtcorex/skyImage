@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -41,13 +40,7 @@ const defaultSiteSettingsForm: SiteSettings = {
   privacyPolicy: "",
   homePageMode: "default",
   homeCustomHtml: "",
-  enableGallery: true,
-  enableHome: true,
-  enableApi: true,
-  enablePasskey: true,
-  allowRegistration: true,
-  registrationMode: "open",
-  accountDisabledNotice: ""
+  accountDisabledNotice: "",
 };
 
 export function AdminSiteSettingsPage() {
@@ -351,60 +344,6 @@ export function AdminSiteSettingsPage() {
                 </p>
               </div>
             )}
-          </div>
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="enableGallery"
-                checked={form.enableGallery}
-                onCheckedChange={(checked) => handleChange("enableGallery", checked)}
-              />
-              <Label htmlFor="enableGallery">{t("admin.siteSettings.enableGallery")}</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="enableHome"
-                checked={form.enableHome}
-                onCheckedChange={(checked) => handleChange("enableHome", checked)}
-              />
-              <Label htmlFor="enableHome">{t("admin.siteSettings.enableHome")}</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="enableApi"
-                checked={form.enableApi}
-                onCheckedChange={(checked) => handleChange("enableApi", checked)}
-              />
-              <Label htmlFor="enableApi">{t("admin.siteSettings.enableApi")}</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="enablePasskey"
-                checked={form.enablePasskey}
-                onCheckedChange={(checked) => handleChange("enablePasskey", checked)}
-              />
-              <Label htmlFor="enablePasskey">{t("admin.siteSettings.enablePasskey")}</Label>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>{t("admin.siteSettings.registrationMode")}</Label>
-              <Select
-                value={form.registrationMode || "open"}
-                onValueChange={(value) => {
-                  handleChange("registrationMode", value);
-                  handleChange("allowRegistration", value !== "closed");
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="open">{t("admin.siteSettings.registrationMode.open")}</SelectItem>
-                  <SelectItem value="oauth_only">{t("admin.siteSettings.registrationMode.oauthOnly")}</SelectItem>
-                  <SelectItem value="closed">{t("admin.siteSettings.registrationMode.closed")}</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">{t("admin.siteSettings.registrationModeHint")}</p>
-            </div>
           </div>
           <div className="space-y-2">
             <Label>{t("admin.siteSettings.accountDisabledNotice")}</Label>
