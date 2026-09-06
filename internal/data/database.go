@@ -150,9 +150,25 @@ func ensureRelativePathColumn(db *gorm.DB) error {
 	table := quoteIdent(db, "files")
 	col := quoteIdent(db, "relative_path")
 	if err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s TEXT DEFAULT ''", table, col)).Error; err != nil {
-		return err
+		// 并发启动时另一个进程可能已补齐该列（SQLite 驱动的 HasColumn
+		// 存在误判），视为成功。
+		if !isDuplicateColumnErr(err) {
+			return err
+		}
 	}
 	return db.Exec(fmt.Sprintf("UPDATE %s SET %s = '' WHERE %s IS NULL", table, col, col)).Error
+}
+
+// isDuplicateColumnErr reports whether the error means the column already
+// exists across sqlite/mysql/postgres.
+func isDuplicateColumnErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate column name") ||
+		strings.Contains(msg, "duplicate column") ||
+		strings.Contains(msg, "already exists")
 }
 
 func ensurePublicURLColumn(db *gorm.DB) error {

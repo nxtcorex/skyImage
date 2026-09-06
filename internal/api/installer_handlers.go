@@ -13,6 +13,8 @@ func (s *Server) registerInstallerRoutes(r *gin.RouterGroup) {
 	group.GET("/status", s.getInstallerStatus)
 	group.POST("/run", s.postInstallerRun)
 	group.GET("/defaults", s.getInstallerDefaults)
+	group.POST("/legacy/test", s.postInstallerLegacyTest)
+	group.POST("/legacy/import", s.postInstallerLegacyImport)
 }
 
 func (s *Server) getInstallerStatus(c *gin.Context) {
@@ -45,4 +47,32 @@ func (s *Server) getInstallerDefaults(c *gin.Context) {
 			"privacyPolicy":  installer.DefaultPrivacyPolicy,
 		},
 	})
+}
+
+func (s *Server) postInstallerLegacyTest(c *gin.Context) {
+	var input installer.LegacySourceInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	result, err := s.installer.TestLegacySource(c.Request.Context(), input)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+func (s *Server) postInstallerLegacyImport(c *gin.Context) {
+	var input installer.LegacySourceInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	summary, err := s.installer.RunLegacyImport(c.Request.Context(), input)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": summary})
 }

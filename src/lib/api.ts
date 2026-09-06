@@ -104,6 +104,64 @@ export async function runInstaller(payload: {
   return res.data.data;
 }
 
+export type LegacyProbeResult = {
+  appName?: string;
+  appVersion?: string;
+  counts?: Record<string, number>;
+  missingTables?: string[];
+  readOnlyReady?: boolean;
+};
+
+export type LegacyImportSummary = {
+  appName?: string;
+  appVersion?: string;
+  sourceReadOnly?: boolean;
+  groups?: number;
+  strategies?: number;
+  groupStrategies?: number;
+  users?: number;
+  usersMerged?: number;
+  albums?: number;
+  files?: number;
+  filesCopied?: number;
+  filesMissing?: number;
+  filesForbidden?: number;
+  forbiddenPaths?: string[];
+  settings?: number;
+};
+
+export type LegacySourcePayload = {
+  databaseType: "mysql" | "sqlite" | "postgres" | "sqlserver";
+  host?: string;
+  port?: string;
+  database?: string;
+  username?: string;
+  password?: string;
+  tablePrefix?: string;
+  sqliteDir?: string;
+  imageDir?: string;
+  adminEmail: string;
+  adminPassword: string;
+};
+
+// 只读探测 Lsky Pro 源数据库（仅 SELECT）
+export async function testLegacySource(payload: LegacySourcePayload) {
+  const res = await apiClient.post<{ data: LegacyProbeResult }>(
+    "/installer/legacy/test",
+    payload
+  );
+  return res.data.data;
+}
+
+// 从 Lsky Pro 源数据库导入数据到新数据库（源库只读）
+export async function importLegacySource(payload: LegacySourcePayload) {
+  const res = await apiClient.post<{ data: LegacyImportSummary }>(
+    "/installer/legacy/import",
+    payload
+  );
+  return res.data.data;
+}
+
 export async function login(payload: {
   email: string;
   password: string;
