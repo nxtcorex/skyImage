@@ -36,6 +36,8 @@ type Config struct {
 	DemoUserEmail     string `mapstructure:"DEMO_USER_EMAIL"`
 	DemoUserPassword  string `mapstructure:"DEMO_USER_PASSWORD"`
 	SkipInstall       bool   `mapstructure:"SKIP_INSTALL"`
+	// 安装向导密码：未安装状态下访问安装向导需要验证；为空则每次启动自动生成随机密码
+	InstallPassword string `mapstructure:"INSTALL_PASSWORD"`
 }
 
 // Load reads configuration from env variables and optional .env/.yaml files.
@@ -76,6 +78,7 @@ func Load() (Config, error) {
 	viper.BindEnv("DEMO_USER_EMAIL")
 	viper.BindEnv("DEMO_USER_PASSWORD")
 	viper.BindEnv("SKIP_INSTALL")
+	viper.BindEnv("INSTALL_PASSWORD")
 
 	_ = viper.ReadInConfig() // best-effort optional .env
 
@@ -126,6 +129,7 @@ func setDefaults() {
 	viper.SetDefault("DEMO_USER_EMAIL", "user@example.com")
 	viper.SetDefault("DEMO_USER_PASSWORD", "UserPass123!")
 	viper.SetDefault("SKIP_INSTALL", false)
+	viper.SetDefault("INSTALL_PASSWORD", "")
 }
 
 func parseCSVEnv(raw string) []string {

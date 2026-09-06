@@ -3,10 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
+  clearInstallerPassword,
   fetchInstallerStatus,
+  getInstallerPassword,
   runInstaller,
+  setInstallerPassword,
   testLegacySource,
   importLegacySource,
+  verifyInstallerPassword,
   type LegacyImportSummary,
   type LegacyProbeResult
 } from "@/lib/api";
@@ -25,7 +29,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/state/auth";
 import { useI18n } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { Database, HardDriveDownload, TriangleAlert } from "lucide-react";
+import { Database, HardDriveDownload, KeyRound, TriangleAlert } from "lucide-react";
 
 type WizardStep = "mode" | "product" | "legacy" | "database" | "site" | "result";
 type InstallMode = "fresh" | "import";
@@ -62,12 +66,34 @@ export function InstallerPage() {
   const [product, setProduct] = useState<"lsky" | null>(null);
   const [productAck, setProductAck] = useState(false);
   const [installedLocally, setInstalledLocally] = useState(false);
+  // 安装密码门禁：sessionStorage 中已有通过验证的密码则直接放行
+  const [gatePassed, setGatePassed] = useState(
+    () => getInstallerPassword() !== ""
+  );
+  const [gatePassword, setGatePassword] = useState("");
   // onError 的闭包可能捕获到旧的状态值，安装是否成功用 ref 同步跟踪。
   const installedRef = useRef(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["installer"],
     queryFn: fetchInstallerStatus
+  });
+
+  // 后端返回 401 时拦截器会清掉 sessionStorage 中的密码，
+  // 据此判断当前密码是否已失效（例如服务重启导致随机密码更换），失效则重新弹出门禁。
+  const installerAuthExpired = () => getInstallerPassword() === "";
+
+  const gateMutation = useMutation({
+    mutationFn: () => verifyInstallerPassword(gatePassword),
+    onSuccess: () => {
+      setInstallerPassword(gatePassword);
+      setGatePassword("");
+      setGatePassed(true);
+    },
+    onError: (error) => {
+      const status = (error as Error & { status?: number }).status;
+      toast.error(status === 401 ? t("installer.gate.wrong") : error.message);
+    }
   });
 
   const [form, setForm] = useState({
@@ -135,6 +161,7 @@ export function InstallerPage() {
     },
     onSuccess: (result) => {
       clearAuth();
+      clearInstallerPassword();
       toast.success(t("installer.complete"));
       queryClient.invalidateQueries({ queryKey: ["installer"] });
       setInstalledLocally(true);
@@ -143,6 +170,12 @@ export function InstallerPage() {
       setStep("result");
     },
     onError: (error) => {
+      // 密码失效（如服务重启更换了随机密码）时重新弹出门禁
+      if (installerAuthExpired()) {
+        setGatePassed(false);
+        toast.error(t("installer.gate.wrong"));
+        return;
+      }
       toast.error(error.message);
       // 安装成功但导入失败时也会走到这里：保留结果页以便重试
       if (installedRef.current) {
@@ -160,7 +193,14 @@ export function InstallerPage() {
       setImportError(null);
       toast.success(t("installer.legacy.importOk"));
     },
-    onError: (error) => setImportError(error.message)
+    onError: (error) => {
+      if (installerAuthExpired()) {
+        setGatePassed(false);
+        toast.error(t("installer.gate.wrong"));
+        return;
+      }
+      setImportError(error.message);
+    }
   });
 
   const probeMutation = useMutation({
@@ -174,6 +214,11 @@ export function InstallerPage() {
       }
     },
     onError: (error) => {
+      if (installerAuthExpired()) {
+        setGatePassed(false);
+        toast.error(t("installer.gate.wrong"));
+        return;
+      }
       setProbe(null);
       toast.error(error.message);
     }
@@ -202,6 +247,57 @@ export function InstallerPage() {
           </Button>
         </CardContent>
       </Card>
+    );
+  }
+
+  // 未安装状态下必须先通过安装密码验证才能进入向导；
+  // 状态未知（接口异常）时不弹门禁，保持与原先一致的报错路径
+  if (data && !data.installed && !gatePassed) {
+    return (
+      <div className="max-w-xl mx-auto mt-20">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              {t("installer.gate.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {t("installer.gate.desc")}
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="installerGatePassword">
+                {t("installer.gate.label")}
+              </Label>
+              <Input
+                id="installerGatePassword"
+                type="password"
+                value={gatePassword}
+                onChange={(e) => setGatePassword(e.target.value)}
+                placeholder={t("installer.gate.placeholder")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && gatePassword && !gateMutation.isPending) {
+                    gateMutation.mutate();
+                  }
+                }}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {t("installer.gate.hint")}
+            </p>
+            <Button
+              className="w-full"
+              onClick={() => gateMutation.mutate()}
+              disabled={!gatePassword || gateMutation.isPending}
+            >
+              {gateMutation.isPending
+                ? t("installer.gate.verifying")
+                : t("installer.gate.submit")}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

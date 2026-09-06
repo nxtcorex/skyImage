@@ -177,6 +177,16 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 	}
 
+	// 未安装状态下提示安装向导密码来源：环境变量固定值或本次启动随机生成的密码。
+	if status, err := s.installer.Status(ctx); err == nil && !status.Installed {
+		if password, fromEnv := s.installer.InstallPassword(); fromEnv {
+			log.Println("安装向导已启用密码验证（密码来源：INSTALL_PASSWORD 环境变量）")
+		} else {
+			log.Printf("未设置 INSTALL_PASSWORD，已自动生成本次启动的安装向导密码：%s", password)
+			log.Println("提示：该密码每次重启都会重新生成，也可通过环境变量 INSTALL_PASSWORD 固定安装密码")
+		}
+	}
+
 	srv := &http.Server{
 		Addr:    s.cfg.HTTPAddr,
 		Handler: s.engine,

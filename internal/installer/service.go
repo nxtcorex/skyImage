@@ -2,11 +2,16 @@ package installer
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"math/big"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -26,6 +31,9 @@ type Service struct {
 	db       *gorm.DB
 	cfg      config.Config
 	switchDB SwitchDatabaseFunc
+
+	generatedPwOnce sync.Once
+	generatedPw     string
 }
 
 func New(db *gorm.DB, cfg config.Config, switchDB SwitchDatabaseFunc) *Service {
@@ -91,6 +99,56 @@ func (s *Service) Status(ctx context.Context) (Status, error) {
 func (s *Service) EnsureBootstrap(ctx context.Context) error {
 	_, err := s.Status(ctx)
 	return err
+}
+
+// installPasswordAlphabet 去掉了 0/O/1/l/I 等易混淆字符，便于从日志手动抄写。
+const installPasswordAlphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+const installPasswordLength = 10
+
+// InstallPassword 返回未安装状态下访问安装向导所需的密码。
+// 优先使用 INSTALL_PASSWORD 环境变量；未提供或为空时，进程内惰性生成一个
+// 10 位随机密码（每次启动都会重新生成），由调用方打印到启动日志。
+// 返回值 fromEnv 表示密码是否来自环境变量。
+func (s *Service) InstallPassword() (password string, fromEnv bool) {
+	if pw := strings.TrimSpace(s.cfg.InstallPassword); pw != "" {
+		return pw, true
+	}
+	s.generatedPwOnce.Do(func() {
+		pw, err := randomInstallPassword(installPasswordLength)
+		if err != nil {
+			// 无法生成随机密码意味着安装向导无法设防，直接终止进程。
+			log.Fatalf("generate installer password: %v", err)
+		}
+		s.generatedPw = pw
+	})
+	return s.generatedPw, false
+}
+
+// VerifyInstallPassword 以恒定时间比较校验安装密码。
+func (s *Service) VerifyInstallPassword(input string) bool {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return false
+	}
+	expected, _ := s.InstallPassword()
+	if expected == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(input), []byte(expected)) == 1
+}
+
+func randomInstallPassword(length int) (string, error) {
+	out := make([]byte, length)
+	max := big.NewInt(int64(len(installPasswordAlphabet)))
+	for i := range out {
+		idx, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", err
+		}
+		out[i] = installPasswordAlphabet[idx.Int64()]
+	}
+	return string(out), nil
 }
 
 func (s *Service) Run(ctx context.Context, in RunInput) (Status, error) {

@@ -3,6 +3,37 @@ import { useAuthStore } from "@/state/auth";
 
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const disabledNoticeKey = "skyimage-disabled-notice";
+const installerPasswordKey = "skyimage-installer-password";
+// sessionStorage 不可用（如部分隐私模式）时的兜底，保证至少本次页面会话内可用
+let memoryInstallerPassword = "";
+
+// 未安装状态下访问安装向导接口需要携带安装密码（X-Install-Password）。
+// 密码保存在 sessionStorage：校验通过后写入，后端返回 401 时清除。
+export function getInstallerPassword(): string {
+  try {
+    return window.sessionStorage.getItem(installerPasswordKey) ?? memoryInstallerPassword;
+  } catch {
+    return memoryInstallerPassword;
+  }
+}
+
+export function setInstallerPassword(password: string) {
+  memoryInstallerPassword = password;
+  try {
+    window.sessionStorage.setItem(installerPasswordKey, password);
+  } catch {
+    // sessionStorage 不可用时仅保留在内存中
+  }
+}
+
+export function clearInstallerPassword() {
+  memoryInstallerPassword = "";
+  try {
+    window.sessionStorage.removeItem(installerPasswordKey);
+  } catch {
+    // 同上
+  }
+}
 
 export const apiClient = axios.create({
   baseURL: apiBase,
@@ -33,6 +64,11 @@ apiClient.interceptors.request.use((config) => {
       config.headers["X-CSRF-Token"] = csrf;
     }
   }
+  const url = config.url || "";
+  if (url.includes("/installer/") && getInstallerPassword()) {
+    config.headers = config.headers || {};
+    config.headers["X-Install-Password"] = getInstallerPassword();
+  }
   return config;
 });
 
@@ -55,6 +91,14 @@ apiClient.interceptors.response.use(
           window.location.href = "/login";
         }
       }
+    }
+
+    // 安装密码被后端拒绝（如服务重启后随机密码已更换）时清除本地缓存，让门禁页重新出现
+    if (
+      status === 401 &&
+      String(error.config?.url || "").includes("/installer/")
+    ) {
+      clearInstallerPassword();
     }
 
     const wrappedError: Error & { status?: number } = new Error(message);
@@ -82,6 +126,15 @@ export async function fetchInstallerStatus() {
     }
     throw error;
   }
+}
+
+// 校验安装向导密码；通过后由调用方写入 sessionStorage，供后续向导接口携带
+export async function verifyInstallerPassword(password: string) {
+  const res = await apiClient.post<{ data: { ok: boolean } }>(
+    "/installer/verify",
+    { password }
+  );
+  return res.data.data;
 }
 
 export async function runInstaller(payload: {
