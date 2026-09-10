@@ -163,7 +163,8 @@ export default function App() {
         <Route
           path="/installer"
           element={
-            installed ? <Navigate to="/login" replace /> : <InstallerPage />
+            // 安装流程结束后 /installer 不再跳转，直接展示 404 页面
+            installed ? <NotFoundPage /> : <InstallerPage />
           }
         />
         <Route path="/login" element={<LoginPage />} />

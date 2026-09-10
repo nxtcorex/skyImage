@@ -390,9 +390,10 @@ func (s *Server) registerFrontend() {
 		if s.tryServeLocalFile(c) {
 			return
 		}
+		cleanPath := "/" + strings.Trim(strings.TrimSpace(c.Request.URL.Path), "/")
 		if s.isKnownFrontendRoute(c.Request.URL.Path) {
 			// 安装完成后访问 /installer 返回 404
-			if c.Request.URL.Path == "/installer" {
+			if cleanPath == "/installer" {
 				status, err := s.installer.Status(c.Request.Context())
 				if err == nil && status.Installed {
 					s.serveIndexHTML(c, distPath, http.StatusNotFound)
