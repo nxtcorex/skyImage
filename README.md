@@ -49,8 +49,8 @@ SkyImage 镜像发布到多个仓库，可按网络环境选择：
 
 | 仓库 | 镜像地址 | 适用场景 |
 | --- | --- | --- |
-| Docker Hub | `nxtcorex/skyImage:latest` | 默认 |
-| GHCR | `ghcr.io/nxtcorex/skyImage:latest` | 海外 |
+| Docker Hub | `fishcpy/skyimage:latest` | 默认 |
+| GHCR | `ghcr.io/nxtcorex/skyimage:latest` | 海外 |
 | CNB | `docker.cnb.cool/nxtcorex/skyimage:latest` | **国内** |
 
 使用 CNB 或 GHCR 镜像时，只需替换 `docker-compose.yml` 中的 `image` 字段即可，例如：
@@ -66,7 +66,7 @@ image: docker.cnb.cool/nxtcorex/skyimage:latest
 docker pull docker.cnb.cool/nxtcorex/skyimage:latest
 
 # GHCR
-docker pull ghcr.io/nxtcorex/skyImage:latest
+docker pull ghcr.io/nxtcorex/skyimage:latest
 ```
 
 ### 数据持久化
