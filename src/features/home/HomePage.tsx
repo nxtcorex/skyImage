@@ -255,7 +255,7 @@ export function HomePage({ siteConfig }: { siteConfig?: SiteConfig }) {
             <p>© {new Date().getFullYear()} {title.trim() || "SkyImage"}</p>
             <div className="flex gap-4">
               <a
-                href="https://github.com/fishcpy/skyImage"
+                href="https://github.com/nxtcorex/skyImage"
                 target="_blank"
                 rel="noreferrer"
                 className="hover:text-foreground transition-colors"

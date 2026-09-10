@@ -25,7 +25,7 @@ import {
 
 export const SITE = {
   name: "SkyImage",
-  github: "https://github.com/fishcpy/skyImage",
+  github: "https://github.com/nxtcorex/skyImage",
   demo: "https://skyimage.demo.123123223.xyz",
   license: "AGPL-3.0"
 };

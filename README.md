@@ -28,10 +28,10 @@ mkdir skyimage
 cd skyimage
 
 # 下载 docker-compose.yml
-curl -O https://raw.githubusercontent.com/fishcpy/skyImage/refs/heads/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/nxtcorex/skyImage/refs/heads/main/docker-compose.yml
 
 # 下载 .env
-curl -o .env https://raw.githubusercontent.com/fishcpy/skyImage/refs/heads/main/.env.example
+curl -o .env https://raw.githubusercontent.com/nxtcorex/skyImage/refs/heads/main/.env.example
 
 # 启动服务
 docker-compose up -d
@@ -49,8 +49,8 @@ SkyImage 镜像发布到多个仓库，可按网络环境选择：
 
 | 仓库 | 镜像地址 | 适用场景 |
 | --- | --- | --- |
-| Docker Hub | `fishcpy/skyimage:latest` | 默认 |
-| GHCR | `ghcr.io/fishcpy/skyimage:latest` | 海外 |
+| Docker Hub | `nxtcorex/skyImage:latest` | 默认 |
+| GHCR | `ghcr.io/nxtcorex/skyImage:latest` | 海外 |
 | CNB | `docker.cnb.cool/nxtcorex/skyimage:latest` | **国内** |
 
 使用 CNB 或 GHCR 镜像时，只需替换 `docker-compose.yml` 中的 `image` 字段即可，例如：
@@ -66,7 +66,7 @@ image: docker.cnb.cool/nxtcorex/skyimage:latest
 docker pull docker.cnb.cool/nxtcorex/skyimage:latest
 
 # GHCR
-docker pull ghcr.io/fishcpy/skyimage:latest
+docker pull ghcr.io/nxtcorex/skyImage:latest
 ```
 
 ### 数据持久化
@@ -80,7 +80,7 @@ Docker 部署会挂载以下目录：
 
 ## 二进制部署
 
-前往 [GitHub Releases](https://github.com/fishcpy/skyImage/releases) 下载对应平台的预编译包。
+前往 [GitHub Releases](https://github.com/nxtcorex/skyImage/releases) 下载对应平台的预编译包。
 
 ### 支持平台
 
@@ -110,7 +110,7 @@ Docker 部署会挂载以下目录：
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/fishcpy/skyImage.git
+git clone https://github.com/nxtcorex/skyImage.git
 cd skyImage
 ```
 
@@ -279,7 +279,7 @@ SkyImage 提供了简洁、现代的用户界面和流畅的用户体验。主�
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=fishcpy/skyImage&type=date&legend=top-left)](https://www.star-history.com/#fishcpy/skyImage&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=nxtcorex/skyImage&type=date&legend=top-left)](https://www.star-history.com/#nxtcorex/skyImage&type=date&legend=top-left)
 
 ## 许可证
 

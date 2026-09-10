@@ -328,11 +328,11 @@ const zh: SiteCopy = {
       docker: [
         { text: "mkdir skyimage && cd skyimage", type: "cmd" },
         {
-          text: "curl -O https://raw.githubusercontent.com/fishcpy/skyImage/refs/heads/main/docker-compose.yml",
+          text: "curl -O https://raw.githubusercontent.com/nxtcorex/skyImage/refs/heads/main/docker-compose.yml",
           type: "cmd"
         },
         {
-          text: "curl -o .env https://raw.githubusercontent.com/fishcpy/skyImage/refs/heads/main/.env.example",
+          text: "curl -o .env https://raw.githubusercontent.com/nxtcorex/skyImage/refs/heads/main/.env.example",
           type: "cmd"
         },
         { text: "", type: "cmd" },
@@ -564,11 +564,11 @@ const en: SiteCopy = {
       docker: [
         { text: "mkdir skyimage && cd skyimage", type: "cmd" },
         {
-          text: "curl -O https://raw.githubusercontent.com/fishcpy/skyImage/refs/heads/main/docker-compose.yml",
+          text: "curl -O https://raw.githubusercontent.com/nxtcorex/skyImage/refs/heads/main/docker-compose.yml",
           type: "cmd"
         },
         {
-          text: "curl -o .env https://raw.githubusercontent.com/fishcpy/skyImage/refs/heads/main/.env.example",
+          text: "curl -o .env https://raw.githubusercontent.com/nxtcorex/skyImage/refs/heads/main/.env.example",
           type: "cmd"
         },
         { text: "", type: "cmd" },
