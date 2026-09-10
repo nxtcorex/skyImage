@@ -23,6 +23,9 @@ api.exe
 # Build artifacts
 dist
 
+# Website
+website
+
 # Environment
 .env
 .env.local

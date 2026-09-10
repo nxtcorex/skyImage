@@ -13,6 +13,9 @@ on:
     branches:
       - main
       - master
+    # website/ 为独立官网工程，不参与镜像构建，其改动不触发本工作流
+    paths-ignore:
+      - 'website/**'
   workflow_dispatch:
     inputs:
       site_name:

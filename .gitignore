@@ -42,3 +42,5 @@ src/**/*.jsx
 src/*.js
 src/*.jsx
 .claude
+.workbuddy
+.trae

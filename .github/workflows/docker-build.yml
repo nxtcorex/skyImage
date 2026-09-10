@@ -5,10 +5,15 @@ on:
     branches:
       - main
       - master
+    # website/ 为独立官网工程，不参与镜像构建，其改动不触发本工作流
+    paths-ignore:
+      - 'website/**'
   pull_request:
     branches:
       - main
       - master
+    paths-ignore:
+      - 'website/**'
 
 env:
   DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME || github.repository_owner }}/skyimage
