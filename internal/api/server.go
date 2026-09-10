@@ -391,6 +391,14 @@ func (s *Server) registerFrontend() {
 			return
 		}
 		if s.isKnownFrontendRoute(c.Request.URL.Path) {
+			// 安装完成后访问 /installer 返回 404
+			if c.Request.URL.Path == "/installer" {
+				status, err := s.installer.Status(c.Request.Context())
+				if err == nil && status.Installed {
+					s.serveIndexHTML(c, distPath, http.StatusNotFound)
+					return
+				}
+			}
 			s.serveIndexHTML(c, distPath, http.StatusOK)
 			return
 		}

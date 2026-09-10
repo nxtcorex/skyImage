@@ -65,7 +65,6 @@ export function InstallerPage() {
   const [mode, setMode] = useState<InstallMode>("fresh");
   const [product, setProduct] = useState<"lsky" | null>(null);
   const [productAck, setProductAck] = useState(false);
-  const [installedLocally, setInstalledLocally] = useState(false);
   // 安装密码门禁：sessionStorage 中已有通过验证的密码则直接放行
   const [gatePassed, setGatePassed] = useState(
     () => getInstallerPassword() !== ""
@@ -152,7 +151,6 @@ export function InstallerPage() {
       // 先于导入标记安装成功：导入失败时 onError 据此进入结果页提供重试，
       // 而不是让用户重跑一个已完成的安装。
       installedRef.current = true;
-      setInstalledLocally(true);
       if (mode === "import") {
         const result = await importLegacySource(legacyPayload());
         return result;
@@ -164,7 +162,6 @@ export function InstallerPage() {
       clearInstallerPassword();
       toast.success(t("installer.complete"));
       queryClient.invalidateQueries({ queryKey: ["installer"] });
-      setInstalledLocally(true);
       setSummary(result);
       setImportError(null);
       setStep("result");
@@ -234,21 +231,7 @@ export function InstallerPage() {
     );
   }
 
-  if (data?.installed && !installedLocally) {
-    return (
-      <Card className="max-w-xl mx-auto mt-20">
-        <CardHeader>
-          <CardTitle>{t("installer.installed")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p>{t("installer.version", { version: data.version ?? "" })}</p>
-          <Button onClick={() => (window.location.href = "/login")}>
-            {t("installer.goLogin")}
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
+  // 安装完成后由路由层直接重定向到登录页，这里不再处理已安装状态
 
   // 未安装状态下必须先通过安装密码验证才能进入向导；
   // 状态未知（接口异常）时不弹门禁，保持与原先一致的报错路径

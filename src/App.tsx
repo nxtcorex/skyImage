@@ -160,8 +160,12 @@ export default function App() {
       <SiteMetaWatcher active={Boolean(installed)} />
       <NoIndexMetaWatcher />
       <Routes>
-        {/* 安装完成后保持挂载，以便显示安装向导的数据导入步骤 */}
-        <Route path="/installer" element={<InstallerPage />} />
+        <Route
+          path="/installer"
+          element={
+            installed ? <Navigate to="/login" replace /> : <InstallerPage />
+          }
+        />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
