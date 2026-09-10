@@ -1,0 +1,353 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 与主项目 src/index.css 保持一致的官方 shadcn/ui new-york + neutral 令牌 */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --radius: 0.5rem;
+    /* 后台侧边栏（与主项目一致，不随配色方案变化） */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 25%;
+    --sidebar-accent: 0 0% 93%;
+    --sidebar-accent-foreground: 0 0% 9%;
+    --sidebar-border: 0 0% 90%;
+  }
+
+  .dark {
+    --background: 0 0% 9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 16%;
+    --ring: 0 0% 83.1%;
+    /* 后台侧边栏（深色，与主项目一致） */
+    --sidebar-background: 0 0% 11%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-accent: 0 0% 16%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 18%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    color-scheme: light;
+    scroll-behavior: smooth;
+    scrollbar-color: hsl(var(--muted-foreground)) hsl(var(--background));
+    scrollbar-width: thin;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  html::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  html::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.55);
+    border-radius: 9999px;
+    border: 2px solid hsl(var(--background));
+  }
+
+  html::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.75);
+  }
+}
+
+/* 可选配色方案（覆盖官方基础令牌），与主项目 src/index.css 一致 */
+:root[data-palette="skyimage"] {
+  /* 与官方 neutral 相同 —— 默认 shadcn 观感 */
+}
+
+.dark[data-palette="skyimage"] {
+}
+
+:root[data-palette="shadcn-admin"] {
+  --background: 214 100% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 221 83% 53%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 214 95% 93%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 214 95% 93%;
+  --muted-foreground: 221 39% 46%;
+  --accent: 214 95% 93%;
+  --accent-foreground: 222 47% 11%;
+  --border: 214 32% 88%;
+  --input: 214 32% 88%;
+  --ring: 221 83% 53%;
+}
+
+.dark[data-palette="shadcn-admin"] {
+  --background: 222 47% 8%;
+  --foreground: 210 40% 98%;
+  --card: 222 47% 11%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 217 92% 60%;
+  --primary-foreground: 222 47% 11%;
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 70%;
+  --accent: 217 33% 17%;
+  --accent-foreground: 210 40% 98%;
+  --border: 217 33% 17%;
+  --input: 217 33% 20%;
+  --ring: 217 92% 60%;
+}
+
+:root[data-palette="zinc"] {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 3.9%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --accent: 240 4.8% 95.9%;
+  --accent-foreground: 240 5.9% 10%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --ring: 240 5.9% 10%;
+}
+
+.dark[data-palette="zinc"] {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 240 10% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 10% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 240 5.9% 10%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 240 3.7% 15.9%;
+  --accent-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --ring: 240 4.9% 83.9%;
+}
+
+:root[data-palette="slate"] {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 222.2 84% 4.9%;
+}
+
+.dark[data-palette="slate"] {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 210 40% 98%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 212.7 26.8% 83.9%;
+}
+
+:root[data-palette="stone"] {
+  --background: 0 0% 100%;
+  --foreground: 20 14.3% 4.1%;
+  --card: 0 0% 100%;
+  --card-foreground: 20 14.3% 4.1%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 20 14.3% 4.1%;
+  --primary: 24 9.8% 10%;
+  --primary-foreground: 60 9.1% 97.8%;
+  --secondary: 60 4.8% 95.9%;
+  --secondary-foreground: 24 9.8% 10%;
+  --muted: 60 4.8% 95.9%;
+  --muted-foreground: 25 5.3% 44.7%;
+  --accent: 60 4.8% 95.9%;
+  --accent-foreground: 24 9.8% 10%;
+  --border: 20 5.9% 90%;
+  --input: 20 5.9% 90%;
+  --ring: 20 14.3% 4.1%;
+}
+
+.dark[data-palette="stone"] {
+  --background: 20 14.3% 4.1%;
+  --foreground: 60 9.1% 97.8%;
+  --card: 20 14.3% 4.1%;
+  --card-foreground: 60 9.1% 97.8%;
+  --popover: 20 14.3% 4.1%;
+  --popover-foreground: 60 9.1% 97.8%;
+  --primary: 60 9.1% 97.8%;
+  --primary-foreground: 24 9.8% 10%;
+  --secondary: 12 6.5% 15.1%;
+  --secondary-foreground: 60 9.1% 97.8%;
+  --muted: 12 6.5% 15.1%;
+  --muted-foreground: 24 5.4% 63.9%;
+  --accent: 12 6.5% 15.1%;
+  --accent-foreground: 60 9.1% 97.8%;
+  --border: 12 6.5% 15.1%;
+  --input: 12 6.5% 15.1%;
+  --ring: 24 5.7% 82.9%;
+}
+
+@layer utilities {
+  .animate-enter {
+    animation: sky-slide-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--enter-delay, 0ms);
+  }
+
+  .animate-enter-1 {
+    --enter-delay: 80ms;
+  }
+
+  .animate-enter-2 {
+    --enter-delay: 160ms;
+  }
+
+  .animate-enter-3 {
+    --enter-delay: 240ms;
+  }
+
+  .animate-enter-4 {
+    --enter-delay: 320ms;
+  }
+}
+
+@keyframes sky-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------------------------------------------------------------
+   统一点击反馈（用于 <a> 等非 Button 组件的可点击元素）
+   按下时轻微缩放 + 灰阶加深，只做原地反馈，不做位移/弹跳动画，
+   与主项目 Button 的 active:scale-[0.97] 保持同一套手感。
+   注：这里用 :not(:disabled) 提高一级优先级，否则同优先级的
+   Tailwind hover:bg-* 工具类会盖掉按下时的底色变化。
+   --------------------------------------------------------------- */
+.press,
+.press-icon {
+  transition:
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.16s ease-out,
+    border-color 0.16s ease-out,
+    color 0.16s ease-out,
+    box-shadow 0.16s ease-out,
+    opacity 0.16s ease-out;
+}
+
+.press:active:not(:disabled) {
+  transform: scale(0.96);
+  background-color: hsl(var(--foreground) / 0.08);
+}
+
+/* 纯图标按钮：缩小幅度更大，否则几乎看不出来 */
+.press-icon:active:not(:disabled) {
+  transform: scale(0.9);
+  background-color: hsl(var(--foreground) / 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-enter {
+    animation: none !important;
+  }
+
+  /* 保留底色变化作为反馈，去掉缩放 */
+  .press:active,
+  .press-icon:active {
+    transform: none;
+  }
+}

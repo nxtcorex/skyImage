@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN" data-page-node-id="EuZmiwlJl1WbpQOxMBzqf9">
+  <head data-page-node-id="27159woWJBGrDIXF4x1Ddt">
+    <meta charset="UTF-8" data-page-node-id="8Bh0P5fXMoK0m6hug8QZ7w" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" data-page-node-id="dkIi5eANVVySweIkh1NH3O" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="THAnkVpjoNO9nLbCMnNrH2" />
+    <meta
+      name="description"
+      content="SkyImage —— 现代化开源图床系统。支持多存储策略、用户组权限、数据库跨库迁移与 Lsky Pro 一键导入。" data-page-node-id="nOMsL5pwQVPEtVGhQOTKlA"
+    />
+    <title>SkyImage · 现代化开源图床系统</title>
+    <script>
+      (function () {
+        try {
+          var storageKey = "skyimage-theme";
+          var stored = localStorage.getItem(storageKey);
+          var systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var resolved =
+            stored === "light" || stored === "dark"
+              ? stored
+              : systemPrefersDark
+                ? "dark"
+                : "light";
+          if (resolved === "dark") {
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+          }
+          document.documentElement.style.colorScheme = resolved;
+
+          var palette = localStorage.getItem("skyimage-theme-palette");
+          var allowed = ["skyimage", "shadcn-admin", "zinc", "slate", "stone"];
+          document.documentElement.dataset.palette =
+            allowed.indexOf(palette) !== -1 ? palette : "skyimage";
+
+          var lang = localStorage.getItem("skyimage-language");
+          var resolvedLang =
+            lang === "zh-CN" || lang === "en"
+              ? lang
+              : (navigator.language || "").toLowerCase().indexOf("zh") === 0
+                ? "zh-CN"
+                : "en";
+          document.documentElement.lang = resolvedLang;
+        } catch (error) {
+          console.warn("theme init failed", error);
+        }
+      })();
+    </script>
+  </head>
+  <body data-page-node-id="CHVdov4EhImvFUtrrze2ke">
+    <div id="root" data-page-node-id="A2RqWiwoB7VsKfiJ71uZDD"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
