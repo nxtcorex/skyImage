@@ -1,5 +1,5 @@
 # SkyImage - CNB 流水线
-# 在 main 推送时构建镜像并推送到 CNB Docker 制品仓库
+# main / master 推送时构建预览镜像；打版本标签 (v*) 时构建多架构(amd64+arm64)正式镜像并发布 Release
 
 main:
   push:
@@ -45,28 +45,96 @@ master:
         - name: 推送镜像
           script: docker push "$IMAGE_TAG"
 
-# 发布版本标签 (v*) 时构建并推送带版本号的镜像，并自动发布 CNB Release
+# ============================================================
+# 发布版本标签 (v*) 时构建多架构镜像、合并清单并自动发布 CNB Release
+# 三个任务并发执行，靠 cnb:resolve / cnb:await 做同步
+# ============================================================
 $:
   tag_push:
-    - name: 构建并发布 SkyImage 版本
+    # ---------- 1/3 amd64 原生构建 ----------
+    - name: 构建 SkyImage amd64 版本镜像
       if: echo "$CNB_BRANCH" | grep -q '^v[0-9]'
       services:
         - docker
+      runner:
+        tags: cnb:arch:amd64
+        cpus: 8
       stages:
-        - name: 设置 tag
-          script: "echo -n \"${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:$(echo ${CNB_BRANCH} | sed 's/^v//'),${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest\""
+        - name: 构建并推送 amd64 镜像
+          script: |
+            set -eu
+            VERSION="$(echo "$CNB_BRANCH" | sed 's/^v//')"
+            IMAGE="${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}"
+            TAG="${VERSION}-linux-amd64"
+            echo "构建节点原生架构: $(uname -m) → 推送 ${IMAGE}:${TAG}"
+            docker build -t "${IMAGE}:${TAG}" .
+            docker push "${IMAGE}:${TAG}"
+        - name: 通知 amd64 构建完成
+          type: cnb:resolve
+          options:
+            key: skyimage-${CNB_BRANCH}-amd64
+
+    # ---------- 2/3 arm64 原生构建 ----------
+    - name: 构建 SkyImage arm64 版本镜像
+      if: echo "$CNB_BRANCH" | grep -q '^v[0-9]'
+      services:
+        - docker
+      runner:
+        tags: cnb:arch:arm64:v8
+        cpus: 8
+      stages:
+        - name: 构建并推送 arm64 镜像
+          script: |
+            set -eu
+            VERSION="$(echo "$CNB_BRANCH" | sed 's/^v//')"
+            IMAGE="${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}"
+            TAG="${VERSION}-linux-arm64"
+            echo "构建节点原生架构: $(uname -m) → 推送 ${IMAGE}:${TAG}"
+            docker build -t "${IMAGE}:${TAG}" .
+            docker push "${IMAGE}:${TAG}"
+        - name: 通知 arm64 构建完成
+          type: cnb:resolve
+          options:
+            key: skyimage-${CNB_BRANCH}-arm64
+
+    # ---------- 3/3 合并多架构清单 + 发布 Release ----------
+    - name: 合并多架构清单并发布 SkyImage 版本
+      if: echo "$CNB_BRANCH" | grep -q '^v[0-9]'
+      services:
+        - docker
+      runner:
+        tags: cnb:arch:amd64
+        cpus: 2
+      stages:
+        - name: 解析版本号
+          script: |
+            echo -n "$(echo "$CNB_BRANCH" | sed 's/^v//')"
           exports:
-            info: IMAGE_TAGS
-        - name: 构建镜像
-          script: |
-            for tag in $(echo "$IMAGE_TAGS" | tr ',' ' '); do
-              docker build -t "$tag" .
-            done
-        - name: 推送镜像
-          script: |
-            for tag in $(echo "$IMAGE_TAGS" | tr ',' ' '); do
-              docker push "$tag"
-            done
+            info: VERSION
+        - name: 等待 amd64 构建完成
+          type: cnb:await
+          options:
+            key: skyimage-${CNB_BRANCH}-amd64
+        - name: 等待 arm64 构建完成
+          type: cnb:await
+          options:
+            key: skyimage-${CNB_BRANCH}-arm64
+        - name: 创建版本号多架构清单
+          image: cnbcool/manifest
+          settings:
+            target: ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:${VERSION}
+            template: ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:${VERSION}-OS-ARCH
+            platforms:
+              - linux/amd64
+              - linux/arm64
+        - name: 创建 latest 多架构清单
+          image: cnbcool/manifest
+          settings:
+            target: ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest
+            template: ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:${VERSION}-OS-ARCH
+            platforms:
+              - linux/amd64
+              - linux/arm64
         - name: 生成更新日志
           script: |
             awk '/^## \[[0-9]/{if(f) exit} f{print} /^## \[[0-9]/{f=1}' CHANGELOG.md > LATEST_CHANGELOG.md
@@ -77,3 +145,12 @@ $:
           options:
             latest: true
             descriptionFromFile: LATEST_CHANGELOG.md
+        # 清单已生成，临时架构标签没用了，清掉保持制品库整洁
+        - name: 清理中间架构标签
+          type: artifact:remove-tag
+          options:
+            name: ${CNB_REPO_NAME}
+            tags:
+              - "${VERSION}-linux-amd64"
+              - "${VERSION}-linux-arm64"
+            type: docker
