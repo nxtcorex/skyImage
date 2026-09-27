@@ -523,6 +523,7 @@ func (s *Server) handleAdminCreateStrategy(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	s.invalidateImageOnlyDomainCache()
 	c.JSON(http.StatusOK, gin.H{"data": item})
 }
 
@@ -560,6 +561,7 @@ func (s *Server) handleAdminUpdateStrategy(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	s.invalidateImageOnlyDomainCache()
 	c.JSON(http.StatusOK, gin.H{"data": item})
 }
 
@@ -582,6 +584,7 @@ func (s *Server) handleAdminDeleteStrategy(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	s.invalidateImageOnlyDomainCache()
 	c.JSON(http.StatusOK, gin.H{"data": "deleted"})
 }
 

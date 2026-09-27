@@ -466,6 +466,9 @@ func validateStrategyConfigs(configs map[string]interface{}) error {
 			}
 		}
 	}
+	if configBool(configs, "image_only_domain") && len(configDomainHosts(configs)) == 0 {
+		return fmt.Errorf("开启「域名仅限图片访问」前需要先为该存储策略配置外部访问域名")
+	}
 	if driver == "webdav" {
 		if err := validateWebDAVConfigs(configs); err != nil {
 			return err
@@ -625,6 +628,42 @@ func validateExternalDomain(raw string) error {
 func looksLikeHost(raw string) bool {
 	lower := strings.ToLower(raw)
 	return strings.Contains(raw, ".") || strings.Contains(raw, ":") || strings.HasPrefix(lower, "localhost")
+}
+
+func configBool(configs map[string]interface{}, key string) bool {
+	switch v := configs[key].(type) {
+	case bool:
+		return v
+	case string:
+		normalized := strings.ToLower(strings.TrimSpace(v))
+		return normalized == "true" || normalized == "1" || normalized == "yes" || normalized == "on"
+	default:
+		return false
+	}
+}
+
+// configDomainHosts returns the hosts a strategy binds for external file access; relative path
+// prefixes are not domains and are skipped.
+func configDomainHosts(configs map[string]interface{}) []string {
+	out := make([]string, 0, 2)
+	for _, rawURL := range configStrings(configs, "url", "base_url", "baseUrl") {
+		for _, item := range splitExternalDomains(rawURL) {
+			normalized := strings.TrimSpace(item)
+			if strings.HasPrefix(normalized, "/") {
+				continue
+			}
+			if !strings.Contains(normalized, "://") {
+				if !looksLikeHost(normalized) {
+					continue
+				}
+				normalized = "http://" + normalized
+			}
+			if parsed, err := url.Parse(normalized); err == nil && parsed.Host != "" {
+				out = append(out, strings.ToLower(parsed.Host))
+			}
+		}
+	}
+	return out
 }
 
 func firstConfigString(configs map[string]interface{}, keys ...string) string {

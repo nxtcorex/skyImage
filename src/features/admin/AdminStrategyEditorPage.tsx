@@ -82,6 +82,7 @@ export function AdminStrategyEditorPage() {
         driver: "local",
         root: "storage/uploads",
         url: "",
+        image_only_domain: false,
         webdav_endpoint: "",
         webdav_username: "",
         webdav_password: "",
@@ -165,6 +166,7 @@ export function AdminStrategyEditorPage() {
                 target.configs?.baseUrl ||
                 ""
             ),
+            image_only_domain: Boolean(target.configs?.image_only_domain),
             webdav_endpoint:
               target.configs?.webdav_endpoint ||
               target.configs?.webdav_url ||
@@ -273,6 +275,7 @@ export function AdminStrategyEditorPage() {
           driver: "local",
           root: "storage/uploads",
           url: "",
+          image_only_domain: false,
           webdav_endpoint: "",
           webdav_username: "",
           webdav_password: "",
@@ -346,6 +349,10 @@ export function AdminStrategyEditorPage() {
     const publicUrls = normalizePublicUrls(
       form.configs?.url || form.configs?.base_url || form.configs?.baseUrl || ""
     );
+    if (Boolean((form.configs as any)?.image_only_domain) && !publicUrls) {
+      toast.error(t("admin.strategyEditor.imageOnlyDomainRequiresUrl"));
+      return;
+    }
     saveMutation.mutate({
       ...form,
       groupIds: selectedGroups,
@@ -353,6 +360,7 @@ export function AdminStrategyEditorPage() {
         ...form.configs,
         url: publicUrls,
         base_url: publicUrls,
+        image_only_domain: Boolean((form.configs as any)?.image_only_domain),
         webdav_endpoint:
           form.configs?.webdav_endpoint ||
           form.configs?.webdav_url ||
@@ -576,6 +584,25 @@ export function AdminStrategyEditorPage() {
               </div>
               <p className="text-xs text-muted-foreground">
                 {t("admin.strategyEditor.publicUrlHint")}
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <Checkbox
+                  id="image-only-domain"
+                  checked={Boolean((form.configs as any)?.image_only_domain)}
+                  onCheckedChange={(checked) => {
+                    const actualValue = checked === "indeterminate" ? false : checked;
+                    setForm((prev) => ({
+                      ...prev,
+                      configs: { ...prev.configs, image_only_domain: actualValue }
+                    }));
+                  }}
+                />
+                <Label htmlFor="image-only-domain" className="cursor-pointer font-normal">
+                  {t("admin.strategyEditor.imageOnlyDomain")}
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("admin.strategyEditor.imageOnlyDomainHint")}
               </p>
             </div>
           </div>

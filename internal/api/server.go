@@ -64,6 +64,10 @@ type Server struct {
 	authLimiter   *requestLimiter
 	publicPaths   map[string]struct{}
 	stopShopExp   chan struct{}
+
+	imageOnlyMu    sync.Mutex
+	imageOnlyHosts []string
+	imageOnlyAt    time.Time
 }
 
 func NewServer(cfg config.Config, db *gorm.DB) *Server {
@@ -104,6 +108,7 @@ func NewServer(cfg config.Config, db *gorm.DB) *Server {
 		authLimiter: newRequestLimiter(),
 		publicPaths: make(map[string]struct{}),
 	}
+	engine.Use(s.imageOnlyDomainGuard)
 	s.applyRuntimeConfig(cfg, db)
 	s.installer = installer.New(db, cfg, s.applyRuntimeConfig)
 	s.registerRoutes()
@@ -390,6 +395,11 @@ func (s *Server) registerFrontend() {
 		if s.tryServeLocalFile(c) {
 			return
 		}
+		// 图片专用域名上没有控制台页面，未命中文件一律 404。
+		if s.isImageOnlyDomain(requestHostname(c)) {
+			c.Status(http.StatusNotFound)
+			return
+		}
 		cleanPath := "/" + strings.Trim(strings.TrimSpace(c.Request.URL.Path), "/")
 		if s.isKnownFrontendRoute(c.Request.URL.Path) {
 			// 安装完成后访问 /installer 返回 404
@@ -536,18 +546,7 @@ func pathPrefix(raw string) string {
 // rejectIfConsoleDomainMismatch returns true when the request host is not the site console host.
 // Thumbnails must only be served from the console domain.
 func (s *Server) rejectIfConsoleDomainMismatch(c *gin.Context) bool {
-	settings, err := s.admin.GetSettings(c.Request.Context())
-	if err != nil {
-		return false
-	}
-	consoleURL := strings.TrimSpace(settings["site.console_url"])
-	if consoleURL == "" {
-		consoleURL = strings.TrimSpace(s.cfg.PublicBaseURL)
-	}
-	if consoleURL == "" {
-		consoleURL = defaultConsoleURL
-	}
-	expectedHosts := extractConfigHosts(consoleURL)
+	expectedHosts := s.consoleDomainHosts(c.Request.Context())
 	if len(expectedHosts) == 0 {
 		return false
 	}
@@ -559,6 +558,32 @@ func (s *Server) rejectIfConsoleDomainMismatch(c *gin.Context) bool {
 	}
 	c.Status(http.StatusNotFound)
 	return true
+}
+
+// consoleDomainHosts resolves the hosts serving the console (site settings override, env fallback).
+func (s *Server) consoleDomainHosts(ctx context.Context) []string {
+	settings, err := s.admin.GetSettings(ctx)
+	if err != nil {
+		return nil
+	}
+	consoleURL := strings.TrimSpace(settings["site.console_url"])
+	if consoleURL == "" {
+		consoleURL = strings.TrimSpace(s.cfg.PublicBaseURL)
+	}
+	if consoleURL == "" {
+		consoleURL = defaultConsoleURL
+	}
+	return extractConfigHosts(consoleURL)
+}
+
+// strategyAccessDomains returns the raw external domain list configured on a strategy.
+func strategyAccessDomains(cfg map[string]interface{}) string {
+	for _, key := range []string{"url", "base_url", "baseUrl"} {
+		if value := strings.TrimSpace(stringValue(cfg, key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // rejectIfStrategyDomainMismatch returns true when the request was rejected (404).
@@ -577,13 +602,7 @@ func (s *Server) rejectIfStrategyDomainMismatch(c *gin.Context, strategyID uint)
 			return false
 		}
 	}
-	domain := strings.TrimSpace(stringValue(cfg, "url"))
-	if domain == "" {
-		domain = strings.TrimSpace(stringValue(cfg, "base_url"))
-	}
-	if domain == "" {
-		domain = strings.TrimSpace(stringValue(cfg, "baseUrl"))
-	}
+	domain := strategyAccessDomains(cfg)
 	expectedHosts := extractConfigHosts(domain)
 	if len(expectedHosts) == 0 {
 		return false
@@ -596,6 +615,130 @@ func (s *Server) rejectIfStrategyDomainMismatch(c *gin.Context, strategyID uint)
 	}
 	c.Status(http.StatusNotFound)
 	return true
+}
+
+// imageOnlyDomainConfigKey is the strategy config switch that turns a bound domain into an
+// image-only domain; imageOnlyDomainCacheTTL bounds how long a strategy change takes to apply.
+const (
+	imageOnlyDomainConfigKey = "image_only_domain"
+	imageOnlyDomainCacheTTL  = 30 * time.Second
+)
+
+// imageOnlyDomainGuard enforces the per-strategy "image only domain" switch: requests arriving on a
+// domain bound to such a strategy may only reach stored files, never the console or the API.
+func (s *Server) imageOnlyDomainGuard(c *gin.Context) {
+	if !s.isImageOnlyDomain(requestHostname(c)) {
+		c.Next()
+		return
+	}
+	if s.isFileAccessRequest(c) {
+		c.Next()
+		return
+	}
+	c.AbortWithStatus(http.StatusNotFound)
+}
+
+// isFileAccessRequest reports whether the request can only be a stored file download.
+// Console pages, app assets and every API endpoint (login/register included) are excluded; unknown
+// paths still fall through to the file lookup, which 404s when nothing matches.
+func (s *Server) isFileAccessRequest(c *gin.Context) bool {
+	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+		return false
+	}
+	path := c.Request.URL.Path
+	switch path {
+	case "/", "/robots.txt", "/favicon.ico":
+		return false
+	}
+	if path == "/api" || path == "/assets" {
+		return false
+	}
+	// 前缀判断保留末尾斜杠，避免把 /apicard.png 这类文件名误判为接口路径。
+	if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/assets/") {
+		return false
+	}
+	return !s.isKnownFrontendRoute(path)
+}
+
+func (s *Server) isImageOnlyDomain(host string) bool {
+	if host == "" || s.admin == nil {
+		return false
+	}
+	for _, expected := range s.imageOnlyDomainHosts() {
+		if hostsMatch(expected, host) {
+			return true
+		}
+	}
+	return false
+}
+
+// imageOnlyDomainHosts returns cached restricted domains, refreshed on TTL expiry so the guard stays
+// off the database for hot image requests.
+func (s *Server) imageOnlyDomainHosts() []string {
+	s.imageOnlyMu.Lock()
+	defer s.imageOnlyMu.Unlock()
+	if !s.imageOnlyAt.IsZero() && time.Since(s.imageOnlyAt) < imageOnlyDomainCacheTTL {
+		return s.imageOnlyHosts
+	}
+	hosts, err := s.collectImageOnlyDomainHosts(context.Background())
+	if err != nil {
+		log.Printf("load image-only domains: %v", err)
+	} else {
+		s.imageOnlyHosts = hosts
+	}
+	s.imageOnlyAt = time.Now()
+	return s.imageOnlyHosts
+}
+
+// invalidateImageOnlyDomainCache makes a strategy change visible without waiting for the TTL.
+func (s *Server) invalidateImageOnlyDomainCache() {
+	s.imageOnlyMu.Lock()
+	s.imageOnlyAt = time.Time{}
+	s.imageOnlyMu.Unlock()
+}
+
+func (s *Server) collectImageOnlyDomainHosts(ctx context.Context) ([]string, error) {
+	strategies, err := s.admin.ListStrategies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	consoleHosts := s.consoleDomainHosts(ctx)
+	// site.console_url 可能是安装时的占位值，一并豁免启动配置的公网地址，避免开关把控制台关在门外。
+	consoleHosts = append(consoleHosts, extractConfigHosts(s.cfg.PublicBaseURL)...)
+	out := make([]string, 0, len(strategies))
+	seen := make(map[string]struct{})
+	for _, strategy := range strategies {
+		var cfg map[string]interface{}
+		if len(strategy.Configs) > 0 {
+			if err := json.Unmarshal(strategy.Configs, &cfg); err != nil {
+				continue
+			}
+		}
+		if !boolValue(cfg[imageOnlyDomainConfigKey]) {
+			continue
+		}
+		for _, host := range extractConfigHosts(strategyAccessDomains(cfg)) {
+			// The console host is never restricted, otherwise the switch could lock its owner out.
+			if containsHost(consoleHosts, host) {
+				continue
+			}
+			if _, ok := seen[host]; ok {
+				continue
+			}
+			seen[host] = struct{}{}
+			out = append(out, host)
+		}
+	}
+	return out, nil
+}
+
+func containsHost(hosts []string, target string) bool {
+	for _, host := range hosts {
+		if hostsMatch(host, target) {
+			return true
+		}
+	}
+	return false
 }
 
 func extractConfigHosts(raw string) []string {

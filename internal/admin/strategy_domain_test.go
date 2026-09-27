@@ -64,3 +64,47 @@ func TestValidateStrategyConfigs_MultipleDomains(t *testing.T) {
 		t.Fatalf("validate multi domain: %v", err)
 	}
 }
+
+func TestValidateStrategyConfigs_ImageOnlyDomainRequiresDomain(t *testing.T) {
+	accepted := []map[string]interface{}{
+		{"driver": "local", "url": "http://img.example.com", "image_only_domain": true},
+		{"driver": "local", "url": "img.example.com", "image_only_domain": "true"},
+	}
+	for _, configs := range accepted {
+		if err := validateStrategyConfigs(configs); err != nil {
+			t.Fatalf("expected %v to be accepted, got %v", configs, err)
+		}
+	}
+
+	cases := []map[string]interface{}{
+		{"driver": "local", "image_only_domain": true},
+		{"driver": "local", "url": "", "image_only_domain": true},
+	}
+	for _, configs := range cases {
+		if err := validateStrategyConfigs(configs); err == nil {
+			t.Fatalf("expected error for %v", configs)
+		}
+	}
+
+	if err := validateStrategyConfigs(map[string]interface{}{
+		"driver":            "local",
+		"image_only_domain": false,
+	}); err != nil {
+		t.Fatalf("switch off should stay unrestricted for path-only url: %v", err)
+	}
+}
+
+func TestConfigDomainHosts(t *testing.T) {
+	hosts := configDomainHosts(map[string]interface{}{
+		"url": "https://img.example.com;uploads; /uploads;http://127.0.0.1:8080",
+	})
+	want := []string{"img.example.com", "127.0.0.1:8080"}
+	if len(hosts) != len(want) {
+		t.Fatalf("got %v want %v", hosts, want)
+	}
+	for i := range want {
+		if hosts[i] != want[i] {
+			t.Fatalf("got %v want %v", hosts, want)
+		}
+	}
+}
