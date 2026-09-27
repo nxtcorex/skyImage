@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -146,7 +147,7 @@ func TestImageOnlyDomainGuard(t *testing.T) {
 	engine.Use(server.imageOnlyDomainGuard)
 	engine.GET("/api/auth/login", func(c *gin.Context) { c.String(http.StatusOK, "api") })
 	engine.GET("/uploads/*filepath", func(c *gin.Context) { c.String(http.StatusOK, "file") })
-	engine.GET("/2026/09/27/a.png", func(c *gin.Context) { c.String(http.StatusOK, "file") })
+	engine.GET("/pic/a.png", func(c *gin.Context) { c.String(http.StatusOK, "file") })
 	engine.GET("/login", func(c *gin.Context) { c.String(http.StatusOK, "page") })
 	engine.POST("/api/files", func(c *gin.Context) { c.String(http.StatusOK, "upload") })
 
@@ -154,24 +155,79 @@ func TestImageOnlyDomainGuard(t *testing.T) {
 		host   string
 		method string
 		path   string
+		accept string
 		want   int
 	}{
-		{"127.0.0.1:8080", http.MethodGet, "/2026/09/27/a.png", http.StatusOK},
-		{"127.0.0.1:8080", http.MethodGet, "/uploads/a.png", http.StatusOK},
-		{"127.0.0.1:8080", http.MethodGet, "/login", http.StatusNotFound},
-		{"127.0.0.1:8080", http.MethodGet, "/api/auth/login", http.StatusNotFound},
-		{"127.0.0.1:8080", http.MethodPost, "/api/files", http.StatusNotFound},
-		{"localhost:8080", http.MethodGet, "/login", http.StatusOK},
-		{"localhost:8080", http.MethodGet, "/api/auth/login", http.StatusOK},
+		{"127.0.0.1:8080", http.MethodGet, "/pic/a.png", "", http.StatusOK},
+		{"127.0.0.1:8080", http.MethodGet, "/uploads/a.png", "", http.StatusOK},
+		{"127.0.0.1:8080", http.MethodGet, "/login", "", http.StatusNotFound},
+		{"127.0.0.1:8080", http.MethodGet, "/api/auth/login", "", http.StatusNotFound},
+		{"127.0.0.1:8080", http.MethodPost, "/api/files", "", http.StatusNotFound},
+		{"localhost:8080", http.MethodGet, "/login", "", http.StatusOK},
+		{"localhost:8080", http.MethodGet, "/api/auth/login", "", http.StatusOK},
 	}
 	for _, tc := range cases {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(tc.method, tc.path, nil)
 		request.Host = tc.host
+		if tc.accept != "" {
+			request.Header.Set("Accept", tc.accept)
+		}
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != tc.want {
 			t.Errorf("%s %s on %s: got %d want %d", tc.method, tc.path, tc.host, recorder.Code, tc.want)
 		}
+	}
+}
+
+// A browser navigation on an image-only domain should render a real page instead of the browser's
+// own error text, while embedded image requests and API calls keep a body-less 404.
+func TestImageOnlyDomainRejectionBody(t *testing.T) {
+	server := newImageOnlyTestServer(t, "http://localhost:8080",
+		strategyWithConfigs(1, `{"driver":"local","url":"http://127.0.0.1:8080","image_only_domain":true}`),
+	)
+
+	engine := gin.New()
+	engine.Use(server.imageOnlyDomainGuard)
+	engine.GET("/login", func(c *gin.Context) { c.String(http.StatusOK, "page") })
+	engine.GET("/pic/a.png", func(c *gin.Context) { c.String(http.StatusOK, "file") })
+
+	navigate := httptest.NewRecorder()
+	browserRequest := httptest.NewRequest(http.MethodGet, "/login", nil)
+	browserRequest.Host = "127.0.0.1:8080"
+	browserRequest.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	engine.ServeHTTP(navigate, browserRequest)
+
+	if navigate.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", navigate.Code)
+	}
+	if got := navigate.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("expected an html notice, got content type %q", got)
+	}
+	body := navigate.Body.String()
+	if !strings.Contains(body, ">404<") || !strings.Contains(body, "\u6b64\u57df\u540d\u4ec5\u7528\u4e8e\u56fe\u7247\u8bbf\u95ee") {
+		t.Fatalf("unexpected notice body: %q", body)
+	}
+	if strings.Contains(body, "src=") {
+		t.Fatalf("notice page must not load external assets: %q", body)
+	}
+
+	embedded := httptest.NewRecorder()
+	imageRequest := httptest.NewRequest(http.MethodGet, "/login", nil)
+	imageRequest.Host = "127.0.0.1:8080"
+	imageRequest.Header.Set("Accept", "image/avif,image/webp,*/*")
+	engine.ServeHTTP(embedded, imageRequest)
+	if embedded.Code != http.StatusNotFound || embedded.Body.Len() != 0 {
+		t.Fatalf("expected body-less 404 for non-browser request, got %d with %q", embedded.Code, embedded.Body.String())
+	}
+
+	file := httptest.NewRecorder()
+	fileRequest := httptest.NewRequest(http.MethodGet, "/pic/a.png", nil)
+	fileRequest.Host = "127.0.0.1:8080"
+	fileRequest.Header.Set("Accept", "text/html,application/xhtml+xml,*/*")
+	engine.ServeHTTP(file, fileRequest)
+	if file.Code != http.StatusOK || file.Body.String() != "file" {
+		t.Fatalf("expected stored file requests to pass through, got %d with %q", file.Code, file.Body.String())
 	}
 }
 

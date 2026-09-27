@@ -397,7 +397,7 @@ func (s *Server) registerFrontend() {
 		}
 		// 图片专用域名上没有控制台页面，未命中文件一律 404。
 		if s.isImageOnlyDomain(requestHostname(c)) {
-			c.Status(http.StatusNotFound)
+			s.rejectImageOnlyRequest(c)
 			return
 		}
 		cleanPath := "/" + strings.Trim(strings.TrimSpace(c.Request.URL.Path), "/")
@@ -634,6 +634,23 @@ func (s *Server) imageOnlyDomainGuard(c *gin.Context) {
 	if s.isFileAccessRequest(c) {
 		c.Next()
 		return
+	}
+	s.rejectImageOnlyRequest(c)
+}
+
+// rejectImageOnlyRequest 拒绝图片专用域名上的非文件请求。浏览器地址栏访问返回 404 页面，
+// 图片嵌入、接口调用等其它客户端保持无响应体的裸 404，避免把 HTML 当作图片数据返回。
+func (s *Server) rejectImageOnlyRequest(c *gin.Context) {
+	if c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead {
+		if strings.Contains(strings.ToLower(c.GetHeader("Accept")), "text/html") {
+			c.Header("Cache-Control", "no-store")
+			c.Header("X-Content-Type-Options", "nosniff")
+			// 页面内容取自后台的 404 设置，其中可能包含管理员编写的 HTML，用 CSP 兜住脚本与表单。
+			c.Header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src *; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox")
+			c.Data(http.StatusNotFound, "text/html; charset=utf-8", s.imageOnlyNoticePage(c.Request.Context()))
+			c.Abort()
+			return
+		}
 	}
 	c.AbortWithStatus(http.StatusNotFound)
 }
