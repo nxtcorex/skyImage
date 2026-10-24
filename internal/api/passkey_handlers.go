@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -213,7 +214,7 @@ func (s *Server) handlePasskeyDelete(c *gin.Context) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid passkey id"})
 		return
 	}
@@ -240,7 +241,7 @@ func (s *Server) handlePasskeyRename(c *gin.Context) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid passkey id"})
 		return
 	}

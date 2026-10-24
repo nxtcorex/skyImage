@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -20,7 +21,7 @@ func parseUintSetting(raw string) uint {
 		return 0
 	}
 	value, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil {
+	if err != nil || value > math.MaxUint {
 		return 0
 	}
 	return uint(value)

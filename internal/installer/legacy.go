@@ -63,6 +63,16 @@ func legacySource(in LegacySourceInput) legacy.Source {
 // TestLegacySource 连接源数据库并做只读探测：确认是 Lsky Pro 的库，
 // 统计可导入的数据量。整个过程只执行 SELECT。
 func (s *Service) TestLegacySource(ctx context.Context, in LegacySourceInput) (*legacy.ProbeResult, error) {
+	status, err := s.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if status.Installed {
+		if err := s.verifyInstallerAdmin(ctx, in.AdminEmail, in.AdminPassword); err != nil {
+			return nil, err
+		}
+	}
+
 	src := legacySource(in)
 	srcDB, openReadOnly, err := legacy.OpenSource(ctx, src)
 	if err != nil {

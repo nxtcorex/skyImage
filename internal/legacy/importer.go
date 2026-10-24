@@ -785,21 +785,33 @@ func (im *importer) copyImageFile(strategyRoot, pathname string) (string, bool) 
 	}
 	slashPath := filepath.FromSlash(pathname)
 
-	candidates := make([]string, 0, 2)
+	roots := make([]string, 0, 2)
 	if im.opts.ImageDir != "" {
-		candidates = append(candidates, filepath.Join(im.opts.ImageDir, slashPath))
+		roots = append(roots, im.opts.ImageDir)
 	}
 	if strategyRoot != "" && filepath.IsAbs(strategyRoot) {
-		candidates = append(candidates, filepath.Join(strategyRoot, slashPath))
+		roots = append(roots, strategyRoot)
 	}
-	if len(candidates) == 0 {
+	if len(roots) == 0 {
 		return "", false
 	}
 
 	var srcPath string
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			srcPath = candidate
+	for _, root := range roots {
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		absPath, err := filepath.Abs(filepath.Join(root, slashPath))
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(absRoot, absPath)
+		if err != nil || !filepath.IsLocal(rel) {
+			continue
+		}
+		if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
+			srcPath = absPath
 			break
 		}
 	}
@@ -807,16 +819,29 @@ func (im *importer) copyImageFile(strategyRoot, pathname string) (string, bool) 
 		return "", false
 	}
 
-	if _, err := os.Stat(destPath); err == nil {
-		return destPath, true
-	}
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+	absDest, err := filepath.Abs(destPath)
+	if err != nil {
 		return "", false
 	}
-	if err := copyFileContents(srcPath, destPath); err != nil {
+	absStorage, err := filepath.Abs(im.opts.StoragePath)
+	if err != nil {
 		return "", false
 	}
-	return destPath, true
+	rel, err := filepath.Rel(absStorage, absDest)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", false
+	}
+
+	if _, err := os.Stat(absDest); err == nil {
+		return absDest, true
+	}
+	if err := os.MkdirAll(filepath.Dir(absDest), 0o755); err != nil {
+		return "", false
+	}
+	if err := copyFileContents(srcPath, absDest); err != nil {
+		return "", false
+	}
+	return absDest, true
 }
 
 func copyFileContents(src, dest string) error {

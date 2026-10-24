@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -267,7 +268,7 @@ func (s *Server) handleAdminCreateShopProduct(c *gin.Context) {
 
 func (s *Server) handleAdminUpdateShopProduct(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
+	if err != nil || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -290,7 +291,7 @@ func (s *Server) handleAdminUpdateShopProduct(c *gin.Context) {
 
 func (s *Server) handleAdminDeleteShopProduct(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
+	if err != nil || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}

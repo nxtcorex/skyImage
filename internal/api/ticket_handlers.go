@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -268,7 +269,7 @@ func (s *Server) handleGetMyTicket(c *gin.Context) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -333,7 +334,7 @@ func (s *Server) handleReplyMyTicket(c *gin.Context) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -368,7 +369,7 @@ func (s *Server) handleCloseMyTicket(c *gin.Context) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -387,7 +388,7 @@ func (s *Server) handleUploadMyTicketAttachment(c *gin.Context) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -444,7 +445,7 @@ func (s *Server) handleAdminGetTicket(c *gin.Context) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -458,7 +459,7 @@ func (s *Server) handleAdminGetTicket(c *gin.Context) {
 
 func (s *Server) handleAdminUpdateTicket(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -491,7 +492,7 @@ func (s *Server) handleAdminReplyTicket(c *gin.Context) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -531,7 +532,7 @@ func (s *Server) handleAdminUploadTicketAttachment(c *gin.Context) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id == 0 || id > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -573,7 +574,7 @@ func (s *Server) readAndStoreTicketAttachment(c *gin.Context, ticketID, userID u
 	}
 	var messageID *uint
 	if raw := strings.TrimSpace(c.PostForm("messageId")); raw != "" {
-		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil && parsed > 0 {
+		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil && parsed > 0 && parsed <= math.MaxUint {
 			id := uint(parsed)
 			messageID = &id
 		}
