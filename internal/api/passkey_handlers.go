@@ -4,9 +4,7 @@ import (
 	"errors"
 	"io"
 	"log"
-	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -213,12 +211,12 @@ func (s *Server) handlePasskeyDelete(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid passkey id"})
 		return
 	}
-	if err := s.passkeys.Delete(c.Request.Context(), user.ID, uint(id)); err != nil {
+	if err := s.passkeys.Delete(c.Request.Context(), user.ID, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "passkey not found"})
 			return
@@ -240,8 +238,8 @@ func (s *Server) handlePasskeyRename(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid passkey id"})
 		return
 	}
@@ -257,7 +255,7 @@ func (s *Server) handlePasskeyRename(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid passkey name"})
 		return
 	}
-	if err := s.passkeys.Rename(c.Request.Context(), user.ID, uint(id), name); err != nil {
+	if err := s.passkeys.Rename(c.Request.Context(), user.ID, id, name); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "passkey not found"})
 			return

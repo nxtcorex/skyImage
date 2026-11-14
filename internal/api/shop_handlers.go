@@ -2,7 +2,6 @@ package api
 
 import (
 	"errors"
-	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -267,8 +266,8 @@ func (s *Server) handleAdminCreateShopProduct(c *gin.Context) {
 }
 
 func (s *Server) handleAdminUpdateShopProduct(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -277,7 +276,7 @@ func (s *Server) handleAdminUpdateShopProduct(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	item, err := s.shop.UpdateProduct(c.Request.Context(), uint(id), input)
+	item, err := s.shop.UpdateProduct(c.Request.Context(), id, input)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, shop.ErrProductNotFound) {
@@ -290,12 +289,12 @@ func (s *Server) handleAdminUpdateShopProduct(c *gin.Context) {
 }
 
 func (s *Server) handleAdminDeleteShopProduct(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	if err := s.shop.DeleteProduct(c.Request.Context(), uint(id)); err != nil {
+	if err := s.shop.DeleteProduct(c.Request.Context(), id); err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, shop.ErrProductNotFound) {
 			status = http.StatusNotFound

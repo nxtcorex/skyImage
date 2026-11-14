@@ -4,8 +4,9 @@ package api
 //
 // 控制台的可配置 404 页是 SPA 路由，需要 index.html、/assets/* 与 /api/site/config，
 // 而这三者正是「域名仅限图片访问」开关要拦掉的内容，所以这里用一张自包含的内联页面，
-// 只复用后台配置的文案：模板模式取「404 大字 + 描述」，自定义 HTML 模式取管理员编写的 HTML。
-// 后台 HTML 在前端由 DOMPurify 过滤，服务端这里使用同一份白名单，避免多出一个注入点。
+// 使用后台「站点信息」中独立的拦截页配置：模板模式取「大字 + 文本」，自定义 HTML 模式取
+// 管理员编写的 HTML。HTML 走与控制台 DOMPurify 同一份服务端白名单，避免多出一个注入点。
+// 页面配色通过 prefers-color-scheme 跟随浏览器深浅色主题。
 
 import (
 	"context"
@@ -41,9 +42,11 @@ const noticePageStyle = `body{margin:0;min-height:100vh;display:flex;align-items
 	`.heading{margin:0;font-size:60px;line-height:1;font-weight:700;letter-spacing:-.02em}` +
 	`.title{margin:16px 0 8px;font-size:18px;font-weight:600}` +
 	`.desc{margin:0;font-size:14px;line-height:1.7;color:#475569;white-space:pre-wrap}` +
-	`.desc a{color:#2563eb}`
+	`.desc a{color:#2563eb}` +
+	// 深色模式：与浅色配色对称反转，跟随浏览器主题，无需 JS。
+	`@media (prefers-color-scheme: dark){body{background:#0f172a;color:#f8fafc}.desc{color:#94a3b8}.desc a{color:#60a5fa}}`
 
-// imageOnlyNoticePage 按后台的 404 设置渲染提示页；读取失败或留空时退回默认提示。
+// imageOnlyNoticePage 按后台「站点信息」中独立的拦截页设置渲染提示页；读取失败或留空时退回默认提示。
 func (s *Server) imageOnlyNoticePage(ctx context.Context) []byte {
 	settings, err := s.admin.GetSettings(ctx)
 	if err != nil {
@@ -54,18 +57,18 @@ func (s *Server) imageOnlyNoticePage(ctx context.Context) []byte {
 
 func renderImageOnlyNotice(settings map[string]string) []byte {
 	title := noticePageTitle(settings)
-	if htmlBody := sanitizeNoticeHTML(settings["site.notfound_html"]); settings["site.notfound_mode"] == "html" && htmlBody != "" {
+	if htmlBody := sanitizeNoticeHTML(settings["site.imageonly_html"]); settings["site.imageonly_mode"] == "html" && htmlBody != "" {
 		return buildNoticePage(title, htmlBody)
 	}
 
 	heading := noticeFallbackHeading
-	if value := strings.TrimSpace(settings["site.notfound_heading"]); value != "" {
+	if value := strings.TrimSpace(settings["site.imageonly_heading"]); value != "" {
 		heading = template.HTMLEscapeString(value)
 	}
 
 	var body strings.Builder
 	body.WriteString(`<p class="heading">` + heading + `</p>`)
-	if value := strings.TrimSpace(settings["site.notfound_text"]); value != "" {
+	if value := strings.TrimSpace(settings["site.imageonly_text"]); value != "" {
 		body.WriteString(`<div class="desc">` + template.HTMLEscapeString(value) + `</div>`)
 		return buildNoticePage(title, body.String())
 	}
@@ -91,6 +94,7 @@ func buildNoticePage(pageTitle, body string) []byte {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex, nofollow">
 <title>` + pageTitle + `</title>
 <style>` + noticePageStyle + `</style>

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,9 +29,9 @@ func TestRenderImageOnlyNoticeFallsBackToTheImageOnlyHint(t *testing.T) {
 
 func TestRenderImageOnlyNoticeUsesConfiguredText(t *testing.T) {
 	body := string(renderImageOnlyNotice(map[string]string{
-		"site.notfound_mode":    "template",
-		"site.notfound_heading": "Gone fishing",
-		"site.notfound_text":    "Nothing <here> & nothing there",
+		"site.imageonly_mode":    "template",
+		"site.imageonly_heading": "Gone fishing",
+		"site.imageonly_text":    "Nothing <here> & nothing there",
 	}))
 
 	if !strings.Contains(body, "Gone fishing") {
@@ -46,7 +47,7 @@ func TestRenderImageOnlyNoticeUsesConfiguredText(t *testing.T) {
 
 func TestRenderImageOnlyNoticeEscapesHeading(t *testing.T) {
 	body := string(renderImageOnlyNotice(map[string]string{
-		"site.notfound_heading": "</p><script>alert(1)</script>",
+		"site.imageonly_heading": "</p><script>alert(1)</script>",
 	}))
 
 	if strings.Contains(body, "<script>") {
@@ -56,8 +57,8 @@ func TestRenderImageOnlyNoticeEscapesHeading(t *testing.T) {
 
 func TestRenderImageOnlyNoticeUsesCustomHTMLMode(t *testing.T) {
 	body := string(renderImageOnlyNotice(map[string]string{
-		"site.notfound_mode": "html",
-		"site.notfound_html": `<h2 class="oops">Broken <em>link</em></h2>`,
+		"site.imageonly_mode": "html",
+		"site.imageonly_html": `<h2 class="oops">Broken <em>link</em></h2>`,
 	}))
 
 	if !strings.Contains(body, `<h2 class="oops">Broken <em>link</em></h2>`) {
@@ -70,12 +71,39 @@ func TestRenderImageOnlyNoticeUsesCustomHTMLMode(t *testing.T) {
 
 func TestRenderImageOnlyNoticeIgnoresCustomHTMLOutsideHtmlMode(t *testing.T) {
 	body := string(renderImageOnlyNotice(map[string]string{
-		"site.notfound_mode": "template",
-		"site.notfound_html": `<h2>should not appear</h2>`,
+		"site.imageonly_mode": "template",
+		"site.imageonly_html": `<h2>should not appear</h2>`,
 	}))
 
 	if strings.Contains(body, "should not appear") {
 		t.Fatalf("custom html must only render in html mode: %q", body)
+	}
+}
+
+func TestRenderImageOnlyNoticeKeepsNotfoundSettingsUnused(t *testing.T) {
+	body := string(renderImageOnlyNotice(map[string]string{
+		"site.notfound_mode":    "html",
+		"site.notfound_html":    `<h1>console 404</h1>`,
+		"site.notfound_heading": "console heading",
+		"site.notfound_text":    "console text",
+	}))
+
+	if strings.Contains(body, "console 404") || strings.Contains(body, "console heading") || strings.Contains(body, "console text") {
+		t.Fatalf("image-only notice must use its own settings, not the console 404 ones: %q", body)
+	}
+	if !strings.Contains(body, noticeFallbackTitle) {
+		t.Fatalf("expected the default image-only fallback notice, got %q", body)
+	}
+}
+
+func TestRenderImageOnlyNoticeSupportsDarkMode(t *testing.T) {
+	body := string(renderImageOnlyNotice(map[string]string{}))
+
+	if !strings.Contains(body, "prefers-color-scheme: dark") {
+		t.Fatalf("expected the default template to follow the browser dark theme, got %q", body)
+	}
+	if !strings.Contains(body, `<meta name="color-scheme" content="light dark">`) {
+		t.Fatalf("expected a color-scheme meta tag, got %q", body)
 	}
 }
 
@@ -171,10 +199,10 @@ func TestSanitizeNoticeHTMLAlwaysNeutralizesBlankTargets(t *testing.T) {
 
 func TestImageOnlyNoticePageReadsStoredSettings(t *testing.T) {
 	server := newImageOnlyTestServer(t, "http://localhost:8080")
-	if err := server.db.Create(&data.ConfigEntry{Key: "site.notfound_heading", Value: "Synced Heading"}).Error; err != nil {
+	if err := server.db.Create(&data.ConfigEntry{Key: "site.imageonly_heading", Value: "Synced Heading"}).Error; err != nil {
 		t.Fatalf("seed heading setting: %v", err)
 	}
-	if err := server.db.Create(&data.ConfigEntry{Key: "site.notfound_text", Value: "Synced text"}).Error; err != nil {
+	if err := server.db.Create(&data.ConfigEntry{Key: "site.imageonly_text", Value: "Synced text"}).Error; err != nil {
 		t.Fatalf("seed text setting: %v", err)
 	}
 
@@ -184,12 +212,12 @@ func TestImageOnlyNoticePageReadsStoredSettings(t *testing.T) {
 	}
 }
 
-// The guard-rendered notice must follow the configured 404 content and keep hardening headers.
+// The guard-rendered notice must follow the configured image-only content and keep hardening headers.
 func TestImageOnlyDomainNoticeUsesConfiguredPage(t *testing.T) {
 	server := newImageOnlyTestServer(t, "http://localhost:8080",
 		strategyWithConfigs(1, `{"driver":"local","url":"http://127.0.0.1:8080","image_only_domain":true}`),
 	)
-	if err := server.db.Create(&data.ConfigEntry{Key: "site.notfound_heading", Value: "Custom 404 Headline"}).Error; err != nil {
+	if err := server.db.Create(&data.ConfigEntry{Key: "site.imageonly_heading", Value: "Custom Notice Headline"}).Error; err != nil {
 		t.Fatalf("seed heading setting: %v", err)
 	}
 
@@ -206,7 +234,7 @@ func TestImageOnlyDomainNoticeUsesConfiguredPage(t *testing.T) {
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", recorder.Code)
 	}
-	if body := recorder.Body.String(); !strings.Contains(body, "Custom 404 Headline") {
+	if body := recorder.Body.String(); !strings.Contains(body, "Custom Notice Headline") {
 		t.Fatalf("expected the configured heading, got %q", body)
 	}
 	if csp := recorder.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "sandbox") {
@@ -214,5 +242,73 @@ func TestImageOnlyDomainNoticeUsesConfiguredPage(t *testing.T) {
 	}
 	if recorder.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("expected nosniff on the notice page")
+	}
+}
+
+// adminUserContextKey 复刻 middleware 的上下文 key（未导出常量），供直接调用处理器时注入超级管理员。
+const adminUserContextKey = "currentUser"
+
+func superAdminSettingsContext(method, target, body string) (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	if body == "" {
+		c.Request = httptest.NewRequest(method, target, nil)
+	} else {
+		c.Request = httptest.NewRequest(method, target, strings.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+	}
+	c.Set(adminUserContextKey, data.User{IsSuperAdmin: true})
+	return c, recorder
+}
+
+// 管理端保存拦截页设置后，拦截页渲染应读取同一份配置（而非控制台 404 页配置）。
+func TestImageOnlyNoticeSettingsRoundTrip(t *testing.T) {
+	server := newImageOnlyTestServer(t, "http://localhost:8080")
+
+	c, recorder := superAdminSettingsContext(http.MethodPatch, "/admin/system/site",
+		`{"imageOnlyMode":"html","imageOnlyHtml":"<h1>Notice only</h1><script>alert(1)</script>","imageOnlyHeading":"Ignored heading"}`)
+	server.handleAdminUpdateSiteSettings(c)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200 on update, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	body := string(server.imageOnlyNoticePage(context.Background()))
+	if !strings.Contains(body, "Notice only") {
+		t.Fatalf("expected the saved custom html to render, got %q", body)
+	}
+	if strings.Contains(body, "<script") || strings.Contains(body, "alert(1)") {
+		t.Fatalf("scripts must be filtered out: %q", body)
+	}
+	if strings.Contains(body, "Ignored heading") {
+		t.Fatalf("template heading must not render in html mode: %q", body)
+	}
+
+	gc, grecorder := superAdminSettingsContext(http.MethodGet, "/admin/system/site", "")
+	server.handleAdminSiteSettings(gc)
+	if grecorder.Code != http.StatusOK {
+		t.Fatalf("expected 200 on read, got %d: %s", grecorder.Code, grecorder.Body.String())
+	}
+	var payload struct {
+		Data struct {
+			ImageOnlyMode    string `json:"imageOnlyMode"`
+			ImageOnlyHeading string `json:"imageOnlyHeading"`
+			ImageOnlyHtml    string `json:"imageOnlyHtml"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(grecorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode settings response: %v", err)
+	}
+	if payload.Data.ImageOnlyMode != "html" || !strings.Contains(payload.Data.ImageOnlyHtml, "Notice only") || payload.Data.ImageOnlyHeading != "Ignored heading" {
+		t.Fatalf("expected saved settings to be returned, got %+v", payload.Data)
+	}
+
+	// 非法模式归一化为 template，切回后自定义 HTML 不再渲染
+	c2, recorder2 := superAdminSettingsContext(http.MethodPatch, "/admin/system/site", `{"imageOnlyMode":"bogus"}`)
+	server.handleAdminUpdateSiteSettings(c2)
+	if recorder2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on mode update, got %d: %s", recorder2.Code, recorder2.Body.String())
+	}
+	if body := string(server.imageOnlyNoticePage(context.Background())); strings.Contains(body, "Notice only") {
+		t.Fatalf("custom html must not render in template mode: %q", body)
 	}
 }

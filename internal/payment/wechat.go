@@ -3,8 +3,9 @@ package payment
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
@@ -14,6 +15,10 @@ import (
 	"sort"
 	"strings"
 )
+
+// wechatSignTypeHMACSHA256 微信支付 APIv2 的 HMAC-SHA256 签名类型。
+// 相比默认的 MD5 签名使用 SHA-256 摘要，是微信官方推荐的签名方式。
+const wechatSignTypeHMACSHA256 = "HMAC-SHA256"
 
 // Wechat implements WeChat Pay Native (scan) using unified order API v2.
 type Wechat struct{}
@@ -32,6 +37,7 @@ type wechatUnifiedRequest struct {
 	AppID          string   `xml:"appid"`
 	MchID          string   `xml:"mch_id"`
 	NonceStr       string   `xml:"nonce_str"`
+	SignType       string   `xml:"sign_type"`
 	Sign           string   `xml:"sign"`
 	Body           string   `xml:"body"`
 	OutTradeNo     string   `xml:"out_trade_no"`
@@ -63,6 +69,7 @@ func (Wechat) CreateCheckout(ctx context.Context, settings Settings, req Checkou
 		"appid":            appID,
 		"mch_id":           mchID,
 		"nonce_str":        nonce,
+		"sign_type":        wechatSignTypeHMACSHA256,
 		"body":             req.Subject,
 		"out_trade_no":     req.OrderNo,
 		"total_fee":        fmt.Sprintf("%d", req.AmountCents),
@@ -75,6 +82,7 @@ func (Wechat) CreateCheckout(ctx context.Context, settings Settings, req Checkou
 		AppID:          appID,
 		MchID:          mchID,
 		NonceStr:       nonce,
+		SignType:       wechatSignTypeHMACSHA256,
 		Sign:           sign,
 		Body:           req.Subject,
 		OutTradeNo:     req.OrderNo,
@@ -169,10 +177,14 @@ func (Wechat) HandleNotify(r *http.Request, settings Settings, expectedCents int
 	}, nil
 }
 
+// wechatSign 按微信支付 APIv2 的 HMAC-SHA256 规则计算签名：
+// 参数按 ASCII 码升序拼接为 key=value&...（排除 sign 与 sign_type），
+// 末尾拼接 &key=API密钥 得到待签名串，以 API 密钥为 HMAC 密钥计算
+// HMAC-SHA256，结果转大写十六进制。
 func wechatSign(params map[string]string, apiKey string) string {
 	keys := make([]string, 0, len(params))
 	for k, v := range params {
-		if k == "sign" || v == "" {
+		if k == "sign" || k == "sign_type" || v == "" {
 			continue
 		}
 		keys = append(keys, k)
@@ -189,8 +201,9 @@ func wechatSign(params map[string]string, apiKey string) string {
 	}
 	b.WriteString("&key=")
 	b.WriteString(apiKey)
-	sum := md5.Sum([]byte(b.String()))
-	return strings.ToUpper(hex.EncodeToString(sum[:]))
+	mac := hmac.New(sha256.New, []byte(apiKey))
+	mac.Write([]byte(b.String()))
+	return strings.ToUpper(hex.EncodeToString(mac.Sum(nil)))
 }
 
 func xmlToMap(raw []byte) (map[string]string, error) {

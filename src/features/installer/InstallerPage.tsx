@@ -65,7 +65,7 @@ export function InstallerPage() {
   const [mode, setMode] = useState<InstallMode>("fresh");
   const [product, setProduct] = useState<"lsky" | null>(null);
   const [productAck, setProductAck] = useState(false);
-  // 安装密码门禁：sessionStorage 中已有通过验证的密码则直接放行
+  // 安装密码门禁：内存中已有通过验证的密码则直接放行
   const [gatePassed, setGatePassed] = useState(
     () => getInstallerPassword() !== ""
   );
@@ -78,7 +78,7 @@ export function InstallerPage() {
     queryFn: fetchInstallerStatus
   });
 
-  // 后端返回 401 时拦截器会清掉 sessionStorage 中的密码，
+  // 后端返回 401 时拦截器会清掉内存中的安装密码，
   // 据此判断当前密码是否已失效（例如服务重启导致随机密码更换），失效则重新弹出门禁。
   const installerAuthExpired = () => getInstallerPassword() === "";
 

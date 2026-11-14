@@ -3,36 +3,17 @@ import { useAuthStore } from "@/state/auth";
 
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const disabledNoticeKey = "skyimage-disabled-notice";
-const installerPasswordKey = "skyimage-installer-password";
-// sessionStorage 不可用（如部分隐私模式）时的兜底，保证至少本次页面会话内可用
 let memoryInstallerPassword = "";
-
-// 未安装状态下访问安装向导接口需要携带安装密码（X-Install-Password）。
-// 密码保存在 sessionStorage：校验通过后写入，后端返回 401 时清除。
 export function getInstallerPassword(): string {
-  try {
-    return window.sessionStorage.getItem(installerPasswordKey) ?? memoryInstallerPassword;
-  } catch {
-    return memoryInstallerPassword;
-  }
+  return memoryInstallerPassword;
 }
 
 export function setInstallerPassword(password: string) {
   memoryInstallerPassword = password;
-  try {
-    window.sessionStorage.setItem(installerPasswordKey, password);
-  } catch {
-    // sessionStorage 不可用时仅保留在内存中
-  }
 }
 
 export function clearInstallerPassword() {
   memoryInstallerPassword = "";
-  try {
-    window.sessionStorage.removeItem(installerPasswordKey);
-  } catch {
-    // 同上
-  }
 }
 
 export const apiClient = axios.create({
@@ -896,6 +877,10 @@ export type SiteSettings = {
   notFoundHeading: string;
   notFoundText: string;
   notFoundHtml: string;
+  imageOnlyMode: string;
+  imageOnlyHeading: string;
+  imageOnlyText: string;
+  imageOnlyHtml: string;
   homePageMode: "default" | "custom_html";
   homeCustomHtml: string;
   accountDisabledNotice: string;

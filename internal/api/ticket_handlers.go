@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -268,12 +267,12 @@ func (s *Server) handleGetMyTicket(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user"})
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	detail, err := s.tickets.Get(c.Request.Context(), uint(id))
+	detail, err := s.tickets.Get(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "ticket not found"})
@@ -333,8 +332,8 @@ func (s *Server) handleReplyMyTicket(c *gin.Context) {
 	if !s.enforceTicketWriteRateLimit(c, user.ID, "reply") {
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -350,7 +349,7 @@ func (s *Server) handleReplyMyTicket(c *gin.Context) {
 		return
 	}
 	msg, err := s.tickets.Reply(c.Request.Context(), tickets.ReplyInput{
-		TicketID: uint(id),
+		TicketID: id,
 		UserID:   user.ID,
 		Body:     payload.Body,
 		IsStaff:  false,
@@ -368,12 +367,12 @@ func (s *Server) handleCloseMyTicket(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user"})
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	ticket, err := s.tickets.CloseByOwner(c.Request.Context(), uint(id), user.ID)
+	ticket, err := s.tickets.CloseByOwner(c.Request.Context(), id, user.ID)
 	if err != nil {
 		writeTicketError(c, err)
 		return
@@ -387,12 +386,12 @@ func (s *Server) handleUploadMyTicketAttachment(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user"})
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	detail, err := s.tickets.Get(c.Request.Context(), uint(id))
+	detail, err := s.tickets.Get(c.Request.Context(), id)
 	if err != nil {
 		writeTicketError(c, err)
 		return
@@ -411,7 +410,7 @@ func (s *Server) handleUploadMyTicketAttachment(c *gin.Context) {
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "操作过于频繁，请稍后再试", "retryAfter": secs})
 		return
 	}
-	att, err := s.readAndStoreTicketAttachment(c, uint(id), user.ID)
+	att, err := s.readAndStoreTicketAttachment(c, id, user.ID)
 	if err != nil {
 		writeTicketError(c, err)
 		return
@@ -444,12 +443,12 @@ func (s *Server) handleAdminGetTicket(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user"})
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	detail, err := s.tickets.Get(c.Request.Context(), uint(id))
+	detail, err := s.tickets.Get(c.Request.Context(), id)
 	if err != nil {
 		writeTicketError(c, err)
 		return
@@ -458,8 +457,8 @@ func (s *Server) handleAdminGetTicket(c *gin.Context) {
 }
 
 func (s *Server) handleAdminUpdateTicket(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -471,7 +470,7 @@ func (s *Server) handleAdminUpdateTicket(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	ticket, err := s.tickets.Update(c.Request.Context(), uint(id), tickets.UpdateInput{
+	ticket, err := s.tickets.Update(c.Request.Context(), id, tickets.UpdateInput{
 		Status:   payload.Status,
 		Priority: payload.Priority,
 	})
@@ -491,8 +490,8 @@ func (s *Server) handleAdminReplyTicket(c *gin.Context) {
 	if !s.enforceTicketWriteRateLimit(c, user.ID, "admin-reply") {
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -504,7 +503,7 @@ func (s *Server) handleAdminReplyTicket(c *gin.Context) {
 		return
 	}
 	msg, err := s.tickets.Reply(c.Request.Context(), tickets.ReplyInput{
-		TicketID: uint(id),
+		TicketID: id,
 		UserID:   user.ID,
 		Body:     payload.Body,
 		IsStaff:  true,
@@ -531,16 +530,16 @@ func (s *Server) handleAdminUploadTicketAttachment(c *gin.Context) {
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "操作过于频繁，请稍后再试", "retryAfter": secs})
 		return
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 || id > math.MaxUint {
+	id, ok := parseIDParam(c)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	if _, err := s.tickets.Get(c.Request.Context(), uint(id)); err != nil {
+	if _, err := s.tickets.Get(c.Request.Context(), id); err != nil {
 		writeTicketError(c, err)
 		return
 	}
-	att, err := s.readAndStoreTicketAttachment(c, uint(id), user.ID)
+	att, err := s.readAndStoreTicketAttachment(c, id, user.ID)
 	if err != nil {
 		writeTicketError(c, err)
 		return
@@ -574,8 +573,7 @@ func (s *Server) readAndStoreTicketAttachment(c *gin.Context, ticketID, userID u
 	}
 	var messageID *uint
 	if raw := strings.TrimSpace(c.PostForm("messageId")); raw != "" {
-		if parsed, err := strconv.ParseUint(raw, 10, 64); err == nil && parsed > 0 && parsed <= math.MaxUint {
-			id := uint(parsed)
+		if id, ok := parseUintValue(raw); ok {
 			messageID = &id
 		}
 	}

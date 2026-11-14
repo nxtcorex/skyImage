@@ -40,6 +40,10 @@ const defaultSiteSettingsForm: SiteSettings = {
   notFoundHeading: "",
   notFoundText: "",
   notFoundHtml: "",
+  imageOnlyMode: "template",
+  imageOnlyHeading: "",
+  imageOnlyText: "",
+  imageOnlyHtml: "",
   homePageMode: "default",
   homeCustomHtml: "",
   accountDisabledNotice: "",
@@ -399,6 +403,67 @@ export function AdminSiteSettingsPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   {t("admin.siteSettings.notFoundHtmlHint")}
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="space-y-4 rounded-lg border p-4">
+            <div className="space-y-2">
+              <Label>{t("admin.siteSettings.imageOnlyMode")}</Label>
+              <Select
+                value={form.imageOnlyMode}
+                onValueChange={(value) => handleChange("imageOnlyMode", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("admin.siteSettings.notFoundModePlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="template">{t("admin.siteSettings.notFoundModeTemplate")}</SelectItem>
+                  <SelectItem value="html">{t("admin.siteSettings.notFoundModeHtml")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t("admin.siteSettings.imageOnlyModeHint")}
+              </p>
+            </div>
+
+            {form.imageOnlyMode === "template" ? (
+              <>
+                <div className="space-y-2">
+                  <Label>{t("admin.siteSettings.imageOnlyHeading")}</Label>
+                  <Input
+                    value={form.imageOnlyHeading}
+                    onChange={(e) => handleChange("imageOnlyHeading", e.target.value)}
+                    placeholder="404"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("admin.siteSettings.imageOnlyHeadingHint")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t("admin.siteSettings.imageOnlyText")}</Label>
+                  <Textarea
+                    rows={3}
+                    value={form.imageOnlyText}
+                    onChange={(e) => handleChange("imageOnlyText", e.target.value)}
+                    placeholder={t("admin.siteSettings.imageOnlyTextPlaceholder")}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("admin.siteSettings.imageOnlyTextHint")}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Label>{t("admin.siteSettings.imageOnlyHtml")}</Label>
+                <Textarea
+                  rows={8}
+                  value={form.imageOnlyHtml}
+                  onChange={(e) => handleChange("imageOnlyHtml", e.target.value)}
+                  placeholder={t("admin.siteSettings.imageOnlyHtmlPlaceholder")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("admin.siteSettings.imageOnlyHtmlHint")}
                 </p>
               </div>
             )}

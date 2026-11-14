@@ -2,7 +2,6 @@ package api
 
 import (
 	"errors"
-	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -16,15 +15,12 @@ import (
 )
 
 func parseUintSetting(raw string) uint {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	// 0 是合法设置值（表示禁用），非法输入同样归零。
+	value, ok := parseUintValue(raw)
+	if !ok {
 		return 0
 	}
-	value, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil || value > math.MaxUint {
-		return 0
-	}
-	return uint(value)
+	return value
 }
 
 // ---------------------------------------------------------------------------
@@ -44,6 +40,10 @@ type siteSettingsPayload struct {
 	NotFoundHeading       string `json:"notFoundHeading"`
 	NotFoundText          string `json:"notFoundText"`
 	NotFoundHtml          string `json:"notFoundHtml"`
+	ImageOnlyMode         string `json:"imageOnlyMode"`
+	ImageOnlyHeading      string `json:"imageOnlyHeading"`
+	ImageOnlyText         string `json:"imageOnlyText"`
+	ImageOnlyHtml         string `json:"imageOnlyHtml"`
 	HomePageMode          string `json:"homePageMode"`
 	HomeCustomHTML        string `json:"homeCustomHtml"`
 	AccountDisabledNotice string `json:"accountDisabledNotice"`
@@ -71,6 +71,10 @@ func (s *Server) handleAdminSiteSettings(c *gin.Context) {
 	if homePageMode == "custom_html" {
 		homeCustomHTML = settings["site.home_custom_html"]
 	}
+	imageOnlyMode := strings.TrimSpace(settings["site.imageonly_mode"])
+	if imageOnlyMode != "html" {
+		imageOnlyMode = "template"
+	}
 	disabledNotice := settings["account.disabled_notice"]
 	if strings.TrimSpace(disabledNotice) == "" {
 		disabledNotice = defaultAccountDisabledNotice
@@ -88,6 +92,10 @@ func (s *Server) handleAdminSiteSettings(c *gin.Context) {
 		NotFoundHeading:       settings["site.notfound_heading"],
 		NotFoundText:          settings["site.notfound_text"],
 		NotFoundHtml:          settings["site.notfound_html"],
+		ImageOnlyMode:         imageOnlyMode,
+		ImageOnlyHeading:      settings["site.imageonly_heading"],
+		ImageOnlyText:         settings["site.imageonly_text"],
+		ImageOnlyHtml:         settings["site.imageonly_html"],
 		HomePageMode:          homePageMode,
 		HomeCustomHTML:        homeCustomHTML,
 		AccountDisabledNotice: disabledNotice,
@@ -109,6 +117,10 @@ type siteSettingsUpdatePayload struct {
 	NotFoundHeading       *string `json:"notFoundHeading"`
 	NotFoundText          *string `json:"notFoundText"`
 	NotFoundHtml          *string `json:"notFoundHtml"`
+	ImageOnlyMode         *string `json:"imageOnlyMode"`
+	ImageOnlyHeading      *string `json:"imageOnlyHeading"`
+	ImageOnlyText         *string `json:"imageOnlyText"`
+	ImageOnlyHtml         *string `json:"imageOnlyHtml"`
 	HomePageMode          *string `json:"homePageMode"`
 	HomeCustomHTML        *string `json:"homeCustomHtml"`
 	AccountDisabledNotice *string `json:"accountDisabledNotice"`
@@ -146,7 +158,19 @@ func (s *Server) handleAdminUpdateSiteSettings(c *gin.Context) {
 	setIf("site.notfound_heading", payload.NotFoundHeading)
 	setIf("site.notfound_text", payload.NotFoundText)
 	setIf("site.notfound_html", payload.NotFoundHtml)
+	setIf("site.imageonly_heading", payload.ImageOnlyHeading)
+	setIf("site.imageonly_text", payload.ImageOnlyText)
+	setIf("site.imageonly_html", payload.ImageOnlyHtml)
 	setIf("site.console_url", payload.ConsoleURL)
+
+	if payload.ImageOnlyMode != nil {
+		// 非 html 一律按模板模式处理，避免写入非法值
+		mode := strings.TrimSpace(*payload.ImageOnlyMode)
+		if mode != "html" {
+			mode = "template"
+		}
+		values["site.imageonly_mode"] = mode
+	}
 
 	if payload.AccountDisabledNotice != nil {
 		notice := strings.TrimSpace(*payload.AccountDisabledNotice)
