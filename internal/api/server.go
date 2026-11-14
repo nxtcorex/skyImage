@@ -664,7 +664,7 @@ func (s *Server) isFileAccessRequest(c *gin.Context) bool {
 	}
 	path := c.Request.URL.Path
 	switch path {
-	case "/", "/robots.txt", "/favicon.ico":
+	case "/", "/robots.txt":
 		return false
 	}
 	if path == "/api" || path == "/assets" {

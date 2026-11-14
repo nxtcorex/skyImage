@@ -37,14 +37,16 @@ const (
 	noticeFallbackDesc    = "This domain only serves stored image and file requests.\n请通过站点主域名访问控制台。"
 )
 
-const noticePageStyle = `body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;color:#0f172a;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}` +
+// 配色与控制台默认的 shadcn neutral 主题保持一致（浅色 #fff/#0a0a0a、深色 #171717/#fafafa），
+// 深浅切换通过 prefers-color-scheme 跟随浏览器主题，无需 JS。
+const noticePageStyle = `body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#fff;color:#0a0a0a;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}` +
 	`main{max-width:640px;padding:32px;text-align:center}` +
 	`.heading{margin:0;font-size:60px;line-height:1;font-weight:700;letter-spacing:-.02em}` +
 	`.title{margin:16px 0 8px;font-size:18px;font-weight:600}` +
-	`.desc{margin:0;font-size:14px;line-height:1.7;color:#475569;white-space:pre-wrap}` +
+	`.desc{margin:0;font-size:14px;line-height:1.7;color:#737373;white-space:pre-wrap}` +
 	`.desc a{color:#2563eb}` +
-	// 深色模式：与浅色配色对称反转，跟随浏览器主题，无需 JS。
-	`@media (prefers-color-scheme: dark){body{background:#0f172a;color:#f8fafc}.desc{color:#94a3b8}.desc a{color:#60a5fa}}`
+	// 深色模式：与控制台 dark 主题同一组中性色，跟随浏览器主题，无需 JS。
+	`@media (prefers-color-scheme: dark){body{background:#171717;color:#fafafa}.desc{color:#a3a3a3}.desc a{color:#60a5fa}}`
 
 // imageOnlyNoticePage 按后台「站点信息」中独立的拦截页设置渲染提示页；读取失败或留空时退回默认提示。
 func (s *Server) imageOnlyNoticePage(ctx context.Context) []byte {
@@ -95,6 +97,7 @@ func buildNoticePage(pageTitle, body string) []byte {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<link rel="icon" href="/favicon.ico">
 <meta name="robots" content="noindex, nofollow">
 <title>` + pageTitle + `</title>
 <style>` + noticePageStyle + `</style>

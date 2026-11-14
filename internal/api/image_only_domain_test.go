@@ -125,7 +125,7 @@ func TestIsFileAccessRequest(t *testing.T) {
 		{http.MethodGet, "/api/v1/token", false},
 		{http.MethodGet, "/assets/index.js", false},
 		{http.MethodGet, "/robots.txt", false},
-		{http.MethodGet, "/favicon.ico", false},
+		{http.MethodGet, "/favicon.ico", true},
 		{http.MethodOptions, "/uploads/a.png", false},
 	}
 	for _, tc := range cases {
