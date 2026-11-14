@@ -1,9 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
+import { type CapErrorDetail } from "@/lib/cap";
 
 export interface CapWidgetProps {
   apiEndpoint: string;
   onVerify: (token: string) => void;
-  onError?: () => void;
+  onError?: (detail?: CapErrorDetail) => void;
   onExpire?: () => void;
 }
 
@@ -66,8 +67,9 @@ export const CapWidget = forwardRef<CapWidgetRef, CapWidgetProps>(
           verifyRef.current?.(detail.token);
         }
       };
-      const handleError = () => {
-        errorRef.current?.();
+      const handleError = (event: Event) => {
+        const detail = (event as CustomEvent<CapErrorDetail>).detail;
+        errorRef.current?.(detail);
       };
       // Cap reset 来源：
       // 1) token TTL 到期（仍在文档中，isConnected=true）→ 视为过期

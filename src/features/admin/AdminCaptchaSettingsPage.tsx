@@ -28,7 +28,7 @@ import { Geetest, type GeetestRef } from "@/components/Geetest";
 import { CapWidget, type CapWidgetRef } from "@/components/CapWidget";
 import { loadTurnstileScript } from "@/lib/turnstile";
 import { loadGeetestScript } from "@/lib/geetest";
-import { buildCapApiEndpoint, loadCapWidget } from "@/lib/cap";
+import { buildCapApiEndpoint, diagnoseCapProblem, loadCapWidget, type CapErrorDetail } from "@/lib/cap";
 import { useI18n } from "@/i18n";
 
 type CaptchaProvider = "cloudflare" | "geetest" | "cap" | "";
@@ -408,9 +408,16 @@ export function AdminCaptchaSettingsPage() {
       toast.error(t("admin.captchaSettings.cap.keysRequired"));
       return;
     }
+    if (
+      window.location.protocol === "https:" &&
+      /^http:\/\//i.test(form.capInstanceUrl.trim())
+    ) {
+      toast.error(t("admin.captchaSettings.cap.errorMixedContent"));
+      return;
+    }
     setShowTester(prev => ({ ...prev, cap: true }));
     setCapReady(false);
-    loadCapWidget()
+    loadCapWidget(form.capInstanceUrl)
       .then(() => setCapReady(true))
       .catch(() => {
         toast.error(t("admin.captchaSettings.cap.loadScriptFailed"));
@@ -425,6 +432,30 @@ export function AdminCaptchaSettingsPage() {
       secretKey: form.capSecretKey,
       token
     });
+  };
+
+  const handleCapError = (detail?: CapErrorDetail) => {
+    const problem = diagnoseCapProblem(detail, {
+      pageIsHttps: window.location.protocol === "https:",
+      instanceUrl: form.capInstanceUrl,
+    });
+    if (problem === "mixedContent") {
+      toast.error(t("admin.captchaSettings.cap.errorMixedContent"));
+      return;
+    }
+    if (problem === "network") {
+      toast.error(t("admin.captchaSettings.cap.errorNetwork"));
+      return;
+    }
+    if (problem === "parse") {
+      toast.error(t("admin.captchaSettings.cap.errorParse"));
+      return;
+    }
+    toast.error(
+      detail?.message
+        ? `${t("admin.captchaSettings.cap.verifyFailed")}（${detail.message}）`
+        : t("admin.captchaSettings.cap.verifyFailed")
+    );
   };
 
   const isFormDirty = initialForm
@@ -805,7 +836,7 @@ export function AdminCaptchaSettingsPage() {
                       ref={capRef}
                       apiEndpoint={capApiEndpoint}
                       onVerify={handleCapVerify}
-                      onError={() => toast.error(t("admin.captchaSettings.widgetError"))}
+                      onError={handleCapError}
                       onExpire={() => {}}
                     />
                   </div>

@@ -3,7 +3,7 @@ import { Turnstile, type TurnstileRef } from "./Turnstile";
 import { CapWidget, type CapWidgetRef } from "./CapWidget";
 import { loadTurnstileScript } from "@/lib/turnstile";
 import { loadGeetestScript } from "@/lib/geetest";
-import { loadCapWidget } from "@/lib/cap";
+import { extractCapInstanceFromEndpoint, loadCapWidget, type CapErrorDetail } from "@/lib/cap";
 
 export type CaptchaProvider = "cloudflare" | "geetest" | "cap";
 
@@ -12,7 +12,7 @@ export interface UnifiedCaptchaProps {
   siteKey: string;
   apiEndpoint?: string;
   onVerify: (token: string, extraData?: Record<string, string>) => void;
-  onError?: () => void;
+  onError?: (detail?: CapErrorDetail) => void;
   onExpire?: () => void;
 }
 
@@ -44,8 +44,8 @@ export const UnifiedCaptcha = forwardRef<UnifiedCaptchaRef, UnifiedCaptchaProps>
     const handleVerify = (token: string, extraData?: Record<string, string>) => {
       onVerifyRef.current?.(token, extraData);
     };
-    const handleError = () => {
-      onErrorRef.current?.();
+    const handleError = (detail?: CapErrorDetail) => {
+      onErrorRef.current?.(detail);
     };
     const handleExpire = () => {
       onExpireRef.current?.();
@@ -88,7 +88,8 @@ export const UnifiedCaptcha = forwardRef<UnifiedCaptchaRef, UnifiedCaptchaProps>
             if (!cancelled) handleError();
           });
       } else if (provider === "cap") {
-        loadCapWidget()
+        const capInstance = extractCapInstanceFromEndpoint(apiEndpoint || "", siteKey);
+        loadCapWidget(capInstance || undefined)
           .then(() => {
             if (!cancelled) setReady(true);
           })
@@ -102,7 +103,7 @@ export const UnifiedCaptcha = forwardRef<UnifiedCaptchaRef, UnifiedCaptchaProps>
         cancelled = true;
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [provider]);
+    }, [provider, apiEndpoint]);
 
     if (provider === "cloudflare") {
       return ready ? (
